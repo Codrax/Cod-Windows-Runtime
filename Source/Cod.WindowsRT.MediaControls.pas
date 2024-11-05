@@ -1030,7 +1030,8 @@ procedure TMediaNotifyPlaybackInfoChangedEvent.Invoke(
   args: Control_IPlaybackInfoChangedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent );
+    if Assigned(Items[I]) then
+      Items[I]( Parent );
 end;
 
 procedure TMediaNotifyPlaybackInfoChangedEvent.Subscribe;
@@ -1052,7 +1053,8 @@ procedure TMediaTimelinePropertiesChangedEvent.Invoke(
   args: Control_ITimelinePropertiesChangedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent );
+    if Assigned(Items[I]) then
+      Items[I]( Parent );
 end;
 
 procedure TMediaTimelinePropertiesChangedEvent.Subscribe;
@@ -1078,7 +1080,8 @@ begin
 
   // Update events
   for var I := 0 to Count-1 do
-    Items[I]( Parent );
+    if Assigned(Items[I]) then
+      Items[I]( Parent );
 end;
 
 procedure TMediaPropertiesChangedEvent.Subscribe;
@@ -1206,7 +1209,8 @@ procedure TSystemMediaSessionManagerCurrentSessionChangedEvent.Invoke(
   args: Control_ICurrentSessionChangedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent );
+    if Assigned(Items[I]) then
+      Items[I]( Parent );
 end;
 
 procedure TSystemMediaSessionManagerCurrentSessionChangedEvent.Subscribe;
@@ -1228,7 +1232,8 @@ procedure TSystemMediaSessionManagerSessionsChangedEvent.Invoke(
   args: Control_ISessionsChangedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent );
+    if Assigned(Items[I]) then
+      Items[I]( Parent );
 end;
 
 procedure TSystemMediaSessionManagerSessionsChangedEvent.Subscribe;
@@ -1488,7 +1493,8 @@ procedure TPlaybackMediaPlayerButtonPressedEvent.Invoke(
   args: ISystemMediaTransportControlsButtonPressedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent, args.Button );
+    if Assigned(Items[I]) then
+      Items[I]( Parent, args.Button );
 end;
 
 procedure TPlaybackMediaPlayerButtonPressedEvent.Subscribe;
@@ -1510,7 +1516,8 @@ procedure TPlaybackMediaPlayerPropertyChangedEvent.Invoke(
   args: ISystemMediaTransportControlsPropertyChangedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent, args.&Property );
+    if Assigned(Items[I]) then
+      Items[I]( Parent, args.&Property );
 end;
 
 procedure TPlaybackMediaPlayerPropertyChangedEvent.Subscribe;
@@ -1932,7 +1939,8 @@ procedure TMediaTransportControlsPlaybackPositionChangeRequestedEvent.Invoke(
   args: IPlaybackPositionChangeRequestedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent, args.RequestedPlaybackPosition.ToMilliseconds );
+    if Assigned(Items[I]) then
+      Items[I]( Parent, args.RequestedPlaybackPosition.ToMilliseconds );
 end;
 
 procedure TMediaTransportControlsPlaybackPositionChangeRequestedEvent.Subscribe;
@@ -1954,7 +1962,8 @@ procedure TMediaTransportControlsPlaybackRateChangeRequestedEvent.Invoke(
   args: IPlaybackRateChangeRequestedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent, args.RequestedPlaybackRate );
+    if Assigned(Items[I]) then
+      Items[I]( Parent, args.RequestedPlaybackRate );
 end;
 
 procedure TMediaTransportControlsPlaybackRateChangeRequestedEvent.Subscribe;
@@ -1976,7 +1985,8 @@ procedure TMediaTransportControlsShuffleEnabledChangeRequestedEvent.Invoke(
   args: IShuffleEnabledChangeRequestedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent, args.RequestedShuffleEnabled );
+    if Assigned(Items[I]) then
+      Items[I]( Parent, args.RequestedShuffleEnabled );
 end;
 
 procedure TMediaTransportControlsShuffleEnabledChangeRequestedEvent.Subscribe;
@@ -1998,7 +2008,8 @@ procedure TMediaTransportControlsRepeatModeChangeRequestedEvent.Invoke(
   args: IAutoRepeatModeChangeRequestedEventArgs);
 begin
   for var I := 0 to Count-1 do
-    Items[I]( Parent, args.RequestedAutoRepeatMode );
+    if Assigned(Items[I]) then
+      Items[I]( Parent, args.RequestedAutoRepeatMode );
 end;
 
 procedure TMediaTransportControlsRepeatModeChangeRequestedEvent.Subscribe;

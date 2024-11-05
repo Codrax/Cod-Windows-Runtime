@@ -365,7 +365,7 @@ type
 
     procedure HandleValues(AValues: TArray<TToastValue>);
   public
-    function GetXML: TDomXMLDocument;
+    function GetXML: TDomXMLDocument; virtual;
 
     // Adders
     procedure AddText(AText: TToastValue);

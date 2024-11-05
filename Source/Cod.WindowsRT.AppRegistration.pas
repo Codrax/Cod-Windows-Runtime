@@ -85,7 +85,7 @@ type
 
     // For start menu
     property AppName: string read GetAppName write SetAppName;
-    property AppIconPath: string read GetAppIconPath write FAppIconPath;
+    property AppIconPath: string read GetAppIconPath write FAppIconPath; // also supports proper icon formating, such as "C:\icon.ico, 2". Where 2 is the index
     property AppDescription: string read FAppDescription write FAppDescription;
     property AppLaunchArguments: string read FAppLaunchArguments write FAppLaunchArguments;
 
@@ -124,9 +124,9 @@ var
   AppRegistration: TCurrentAppRegistration;
 
 // Shortcut
-function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, Description: string; Arguments: string=''): boolean;
+function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, Description: string; Arguments: string=''; IconPath: string=''; IconIndex: integer=0): boolean;
 
-function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description: string; Arguments: string=''; Global: boolean=true): boolean;
+function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description: string; Arguments: string=''; IconPath: string=''; IconIndex: integer=0; Global: boolean=true): boolean;
 function UnRegisterApplication(AppName: string; Global: boolean): boolean;
 
 implementation
@@ -140,9 +140,9 @@ begin
   Result := Result+ValidateFileName(AppName)+'.lnk';
 end;
 
-function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description, Arguments: string; Global: boolean): boolean;
+function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description, Arguments, IconPath: string; IconIndex: integer; Global: boolean): boolean;
 begin
-  Result := InstallShortcut(AppUserModelID, AppExecutable, GetAppStartMenuLocation(AppName, Global), Description, Arguments);
+  Result := InstallShortcut(AppUserModelID, AppExecutable, GetAppStartMenuLocation(AppName, Global), Description, Arguments, IconPath, IconIndex);
 end;
 
 function UnRegisterApplication(AppName: string; Global: boolean): boolean;
@@ -159,7 +159,7 @@ begin
   end;
 end;
 
-function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, Description, Arguments: string): boolean;
+function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, Description, Arguments, IconPath: string; IconIndex: integer): boolean;
 var
   newShortcut: IShellLink;
 
@@ -177,6 +177,9 @@ begin
     SetDescription(PChar(Description));
     SetPath(PChar(ExePath));
     SetWorkingDirectory(PChar( ExtractFileDir(ExePath) ));
+
+    if IconPath <> '' then
+      SetIconLocation(PChar(IconPath), 0);
   end;
 
   // Property store
@@ -359,7 +362,11 @@ end;
 procedure TAppRegistration.RegisterStartMenuClass(DoRegister: boolean; Global: boolean);
 begin
   if DoRegister then begin
-    if not RegisterApplication(GetAppName, AppUserModelID, AppExecutable, AppDescription, AppLaunchArguments, Global) then
+    var IconIndex: word;
+    var IconPath: string;
+    ExtractIconDataEx(AppIconPath, IconPath, IconIndex);
+
+    if not RegisterApplication(GetAppName, AppUserModelID, AppExecutable, AppDescription, AppLaunchArguments, IconPath, IconIndex, Global) then
       raise Exception.Create('Failed to register application in start menu.');
   end
     else
