@@ -8,7 +8,8 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
   Vcl.Graphics, Registry, Vcl.Dialogs, Vcl.Forms, UITypes, Types, Winapi.shlobj,
   Cod.Registry, IOUtils, ActiveX, ComObj, ShellApi, Cod.ColorUtils, PsApi,
-  Cod.Files, Cod.Types, Cod.MesssageConst, Winapi.TlHelp32, Cod.Windows.ThemeApi;
+  Vcl.Imaging.pngimage, Cod.Graphics, Cod.Files, Cod.Types, Cod.MesssageConst,
+  Winapi.TlHelp32, Cod.Windows.ThemeApi, Cod.SysUtils;
 
   type
     // Cardinals
@@ -142,6 +143,14 @@ uses
   function GetOpenProgramFileNameEx: ansistring;
   function GetActiveWindow: HWND;
   function GetActiveWindows: TArray<HWND>;
+
+  { Icons }
+  function GetIconStrIcon(IconString: string; Icon: TIcon): boolean; overload;
+  function GetIconStrIcon(IconString: string; PngImage: TPngImage): boolean; overload;
+  procedure GetFileIcon(FileName: string; PngImage: TPngImage; IconIndex: word = 0);
+  procedure GetFileIconEx(FileName: string; PngImage: TPngImage; IconIndex: word = 0; SmallIcon: boolean = false);
+  function GetFileIconCount(FileName: string): integer;
+  function GetAllFileIcons(FileName: string): TArray<TPngImage>;
 
   { Input }
   procedure SimulateKeyPress32(key: Word; const shift: TShiftState; specialkey: Boolean);
@@ -538,6 +547,129 @@ begin
   Result := [];
 
   EnumWindows(@EnumWindowsCallback_ProcessPointer, LPARAM(@Result));
+end;
+
+function GetIconStrIcon(IconString: string; Icon: TIcon): boolean; overload;
+var
+  IconIndex: word;
+  FilePath: string;
+begin
+  Result := false;
+
+  // Load
+  ExtractIconDataEx(IconString, FilePath, IconIndex);
+  if not TFile.Exists(FilePath) then
+    Exit;
+
+  // Get TIcon
+  Icon.Handle := ExtractAssociatedIcon(HInstance, PChar(FilePath), IconIndex);
+  Icon.Transparent := true;
+
+  // Success
+  Result := true;
+end;
+
+function GetIconStrIcon(IconString: string; PngImage: TPngImage): boolean;
+var
+  Icon: TIcon;
+  IconIndex: word;
+begin
+  Result := false;
+
+  // Load
+  ExtractIconDataEx(IconString, IconString, IconIndex);
+  if not TFile.Exists(IconString) then
+    Exit;
+
+  // Get TIcon
+  Icon := TIcon.Create;
+  try
+    Icon.Handle := ExtractAssociatedIcon(HInstance, PChar(IconString), IconIndex);
+    Icon.Transparent := true;
+
+    // Convert to PNG
+    ConvertToPNG(Icon, PngImage);
+
+    // Success
+    Result := true;
+  finally
+    Icon.Free;
+  end;
+end;
+
+procedure GetFileIcon(FileName: string; PngImage: TPngImage; IconIndex: word);
+var
+  ic: TIcon;
+begin
+  // Get TIcon
+  ic := TIcon.Create;
+  try
+    ic.Handle := ExtractAssociatedIcon(HInstance, PChar(FileName), IconIndex);
+    ic.Transparent := true;
+
+    // Convert to PNG
+    ConvertToPNG(ic, PngImage);
+  finally
+    ic.Free;
+  end;
+end;
+
+procedure GetFileIconEx(FileName: string; PngImage: TPngImage; IconIndex: word;
+  SmallIcon: boolean);
+var
+  ic: TIcon;
+  SHFileInfo: TSHFileInfo;
+  Flags: Cardinal;
+begin
+  Flags := SHGFI_ICON or SHGFI_USEFILEATTRIBUTES;
+  if SmallIcon then
+    Flags := Flags or SHGFI_SMALLICON
+  else
+    Flags := Flags or SHGFI_LARGEICON;
+
+  SHGetFileInfo(PChar(FileName), 0, SHFileInfo, SizeOf(TSHFileInfo),
+    Flags);
+
+  // Get TIcon
+  ic := TIcon.Create;
+  try
+    ic.Handle := SHFileInfo.hIcon;;
+    ic.Transparent := true;
+
+    // Convert to PNG
+    PngImage := TPngImage.Create;
+
+    ConvertToPNG(ic, PngImage);
+  finally
+    ic.Free;
+  end;
+end;
+
+function GetFileIconCount(FileName: string): integer;
+begin
+  Result := ExtractIcon(0, PChar(FileName), Cardinal(-1));
+end;
+
+function GetAllFileIcons(FileName: string): TArray<TPngImage>;
+var
+  cnt: integer;
+  I: Integer;
+begin
+  // Get Count
+  cnt := GetFileIconCount(FileName);
+
+  SetLength(Result, cnt);
+
+  for I := 0 to cnt - 1 do
+    begin
+      Result[I] := TPngImage.Create;
+
+      try
+        GetFileIcon(FileName, Result[I], I);
+      except
+        // Invalid icon handle
+      end;
+    end;
 end;
 
 function GetUserCLSID: string;

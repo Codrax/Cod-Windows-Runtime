@@ -415,8 +415,6 @@ type
     FNotifier2: IToastNotifier2;
 
     FRegSettingsPath: string;
-    FIconCacheIsActive: boolean; // is the app using the default cache? Or a custom icon
-    FCreateIconCache: boolean; // create default icon cache from the .exe icon when the record is created
 
     // System
     function HasRegistryRecord: boolean;
@@ -448,9 +446,6 @@ type
     // Utils
     procedure DestroyNotification(var ANotification: TNotification); // hide & free notification
     procedure RepostNotification(ANotification: TNotification);
-
-    // Settings
-    property CreateIconCache: boolean read FCreateIconCache write FCreateIconCache;
 
     // Action Center Settings
     property HideOnLockScreen: TWinBoolean read GetHideLockScreen write SetHideLockScreen;
@@ -537,9 +532,6 @@ end;
 constructor TNotificationManager.Create;
 begin
   inherited Create;
-  // Defaults
-  FCreateIconCache := true;
-
   // Registration
   if not AppRegistration.RegisteredAny then
     OutputDebugString('WARNING: The application model ID is not registered. Notifications will not display.');
