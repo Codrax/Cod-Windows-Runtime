@@ -49,6 +49,12 @@ with TAppRegistration.Create do
   end;
 ```
 
+## More about AppUserModelIDs
+Once an application is registered with It's ID, It can be opened from the run menu (Win+R) and the following syntax
+```
+shell:appsfolder\<AppUserModelID>
+```
+
 ## Documentation for specific units
 - [Notification Manager](https://github.com/Codrax/Cod-WinRT-Notification-Manager)
 - [Media Controls](https://github.com/Codrax/Cod-WinRT-Media-Controls)
