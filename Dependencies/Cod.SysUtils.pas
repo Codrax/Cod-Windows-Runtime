@@ -138,9 +138,9 @@ interface
   {$ENDIF}
 
   { Paths }
-  procedure ExtractIconData(AFilePath: string; out Path: string; out IconIndex: word);
+  procedure ExtractIconData(AFilePath: string; var Path: string; out IconIndex: word);
   // Same as above, but with checks for if a file contains ","
-  procedure ExtractIconDataEx(AFilePath: string; out Path: string; out IconIndex: word);
+  procedure ExtractIconDataEx(AFilePath: string; var Path: string; out IconIndex: word);
 
   { File }
   {$IFDEF MSWINDOWS}
@@ -1258,7 +1258,7 @@ begin
 end;
 {$ENDIF}
 
-procedure ExtractIconData(AFilePath: string; out Path: string; out IconIndex: word);
+procedure ExtractIconData(AFilePath: string; var Path: string; out IconIndex: word);
 var
   Directory: string;
   FileName: string;
@@ -1282,11 +1282,11 @@ begin
   // Remove rest
   Directory := ExtractFileDir(AFilePath);
   if Directory <> '' then
-    IncludeTrailingPathDelimiter(Directory);
+    Directory := IncludeTrailingPathDelimiter(Directory);
   Path := Directory + FileName.Substring(0, Index); // I is the position, so no need for -1
 end;
 
-procedure ExtractIconDataEx(AFilePath: string; out Path: string; out IconIndex: word);
+procedure ExtractIconDataEx(AFilePath: string; var Path: string; out IconIndex: word);
 begin
   // Load
   if TFile.Exists(AFilePath) then begin

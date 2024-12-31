@@ -177,6 +177,28 @@ type
     function ToRect: TRect;
   end;
 
+  // Rects
+  TRectLayoutContentFill = (None, Stretch, Fill, Fit, SelfProportion, ParentProportion);
+  TRectLayoutTileFlag = (ExtendX, ExtendY);
+  TRectLayoutTileFlags = set of TRectLayoutTileFlag;
+  TRectLayout = record
+    LayoutHorizontal: TLayout;
+    LayoutVertical: TLayout;
+
+    CenterDivisor: TSizeF;
+    ProportionScale: TSizeF;
+
+    ContentFill: TRectLayoutContentFill;
+    Tile: boolean;
+    TileFlags: TRectLayoutTileFlags;
+
+    MarginTile: integer;
+    MarginParent: integer;
+    MarginSelf: integer;
+
+    class function New: TRectLayout; static;
+  end;
+
   // Math & Array
   TIntegerList = class;
 
@@ -260,6 +282,11 @@ procedure ContainRectInRect(var ARect: TRect; const ParentRect: TRect);
 ///  NOTE: Rectangles must be normalised!
 function MorphToRect(Source: TRect; Destination: TRect; Percent: single): TRect; overload;
 function MorphToRect(Source: TPoint; Destination: TRect; Percent: single): TRect; overload;
+function RectangleLayouts(const Element: TSize; Parent: TRect; Layout: TRectLayout): TArray<TRect>; overload;
+function RectangleLayouts(const Element: TRect; Parent: TRect; Layout: TRectLayout): TArray<TRect>; overload;
+
+{ Matrix }
+procedure FloodFill(var Grid: TArray<TArray<boolean>>; Start: TPoint; NewValue: boolean);
 
 { Points }
 function SetPositionAroundPoint(Point: TPoint; Center: TPoint; degree: real; customradius: real = -1): TPoint;
@@ -478,6 +505,157 @@ end;
 function MorphToRect(Source: TPoint; Destination: TRect; Percent: single): TRect;
 begin
   Result := MorphToRect(TRect.Create(Source), Destination, Percent);
+end;
+
+function RectangleLayouts(const Element: TSize; Parent: TRect; Layout: TRectLayout): TArray<TRect>; overload;
+var
+  Base: TRect;
+
+  BoundBottomRight: TPoint;
+begin
+  // Shrink Margins
+  if Layout.MarginParent <> 0 then
+    Parent.Inflate(-Layout.MarginParent, -Layout.MarginParent);
+
+  if (Element.Width = 0) or (Element.Height = 0) then
+    Exit;
+
+  // Calculate base
+  Base := TRect.Empty;
+  case Layout.ContentFill of
+    TRectLayoutContentFill.Stretch: Base := Parent;
+    TRectLayoutContentFill.Fill: begin
+      Base := Parent;
+
+      // Get proportions
+      const Scale = Element .Height * (Base.Width / Element.Width);
+      if Scale < Base.Height then
+        Base.Width := trunc(Element.Width * (Base.Height / Element.Height))
+          else
+            Base.Height := trunc(Scale);
+    end;
+    TRectLayoutContentFill.Fit: begin
+      Base := Parent;
+
+      // Get proportions
+      const Scale = Element.Height * (Base.Width / Element.Width);
+      if Scale > Base.Height then
+        Base.Width := trunc(Element.Width * (Base.Height / Element.Height))
+          else
+            Base.Height := trunc(Scale);
+    end;
+    TRectLayoutContentFill.SelfProportion: begin
+      Base := TRect.Create(Parent.TopLeft,
+        round(Element.Width * Layout.ProportionScale.cx),
+        round(Element.Height * Layout.ProportionScale.cy));
+    end;
+    TRectLayoutContentFill.ParentProportion: begin
+      Base := TRect.Create(Parent.TopLeft,
+        round(Parent.Width * Layout.ProportionScale.cx),
+        round(Parent.Height * Layout.ProportionScale.cy));
+    end
+
+    // Default, keep same size
+    else Base := TRect.Create(Parent.TopLeft, Element.Width, Element.Height);
+  end;
+
+  // Layout
+  if Layout.Tile then begin
+    Result := [Base];
+    var ColCount, RowCount, DivTotal: integer;
+    var ElemSize: TSize;
+    ElemSize := TSize.Create(Base.Width+Layout.MarginTile, Base.Height+Layout.MarginTile);
+
+    // Calculate columns
+    DivTotal := (Parent.Width+Layout.MarginTile);
+    ColCount := DivTotal div ElemSize.cx;
+    if TRectLayoutTileFlag.ExtendX in Layout.TileFlags then
+      if DivTotal mod ElemSize.cx > 0 then
+        Inc(ColCount);
+
+
+    // Calculate rows
+    DivTotal := (Parent.Height+Layout.MarginTile);
+    RowCount := DivTotal div ElemSize.cy;
+    if TRectLayoutTileFlag.ExtendY in Layout.TileFlags then
+      if DivTotal mod ElemSize.cy > 0 then
+        Inc(RowCount);
+
+    // Calculate each
+    SetLength(Result, RowCount*ColCount);
+    BoundBottomRight := Base.TopLeft;
+    for var Row := 0 to RowCount-1 do
+      for var Col := 0 to ColCount-1 do begin
+        const Index = Row*ColCount + Col;
+        Result[Index] := Base;
+        Result[Index].Offset( ElemSize.cx*Col, ElemSize.cy*Row );
+      end;
+
+    // Bottom right
+    BoundBottomRight := TPoint.Create(
+      Base.Left+ElemSize.cx*(ColCount-1) + Base.Width,
+      Base.Top+ElemSize.cy*(RowCount-1) + Base.Height);
+  end
+    else begin
+      Result := [Base];
+
+      BoundBottomRight := Base.BottomRight;
+    end;
+
+  // Layout
+  if (Layout.LayoutHorizontal <> TLayout.Beginning) or (Layout.LayoutVertical <> TLayout.Beginning) then begin
+    var Offset: TPoint;
+    Offset := TPoint.Zero;
+
+    // Horizontal offset
+    case Layout.LayoutHorizontal of
+      TLayout.Center: Offset.X := trunc((Parent.Right - BoundBottomRight.X) / Layout.CenterDivisor.cx);
+      TLayout.Ending: Offset.X := Parent.Right - BoundBottomRight.X;
+    end;
+    // Vertical offset
+    case Layout.LayoutVertical of
+      TLayout.Center: Offset.Y := trunc((Parent.Bottom - BoundBottomRight.Y) / Layout.CenterDivisor.cy);
+      TLayout.Ending: Offset.Y := Parent.Bottom - BoundBottomRight.Y;
+    end;
+
+    for var I := 0 to High(Result) do
+      Result[I].Offset( Offset );
+  end;
+
+  // Margin self
+  if Layout.MarginSelf <> 0 then
+    for var I := 0 to High(Result) do
+      Result[I].Inflate(-Layout.MarginSelf, -Layout.MarginSelf);
+end;
+
+function RectangleLayouts(const Element: TRect; Parent: TRect; Layout: TRectLayout): TArray<TRect>;
+begin
+  Result := RectangleLayouts(TSize.Create(Element.Width, Element.Height), Parent, Layout);
+end;
+
+procedure FloodFill(var Grid: TArray<TArray<boolean>>; Start: TPoint; NewValue: boolean);
+var
+  Queue: TQueue<TPoint>;
+  CurrentPoint: TPoint;
+  X, Y: Integer;
+begin
+  Queue := TQueue<TPoint>.Create;
+  Queue.Enqueue(TPoint.Create(Start.X, Start.Y));
+  while Queue.Count > 0 do
+  begin
+    CurrentPoint := Queue.Dequeue;
+    X := CurrentPoint.X;
+    Y := CurrentPoint.Y;
+    if (X >= 0) and (X < Length(Grid)) and (Y >= 0) and (Y < Length(Grid[X]))and (Grid[X, Y] <> NewValue) then
+    begin
+      Grid[X, Y] := NewValue;
+      Queue.Enqueue(TPoint.Create(X - 1, Y));
+      Queue.Enqueue(TPoint.Create(X + 1, Y));
+      Queue.Enqueue(TPoint.Create(X, Y - 1));
+      Queue.Enqueue(TPoint.Create(X, Y + 1));
+    end;
+  end;
+  Queue.Free;
 end;
 
 function SetPositionAroundPoint(Point: TPoint; Center: TPoint; degree: real; customradius: real = -1): TPoint;
@@ -1265,7 +1443,7 @@ class procedure TSwitch<T>.Switch(Value: T; Cases: TArray<TCase>; Default: TProc
 begin
   for var I := 0 to High(Cases) do
     for var J := 0 to High(Cases[I].Values) do
-      if Cases[I].Values[J] = Value then begin
+      if TComparer<T>.Default.Compare(Cases[I].Values[J], Value) = TValueRelationship.Equal then begin
         Cases[I].Execute;
         Exit;
       end;
@@ -1313,6 +1491,25 @@ begin
   Temp := A;
   A := B;
   B := Temp;
+end;
+
+{ TRectLayout }
+
+class function TRectLayout.New: TRectLayout;
+begin
+  Result.LayoutHorizontal := TLayout.Beginning;
+  Result.LayoutVertical := TLayout.Beginning;
+
+  Result.CenterDivisor := TSizeF.Create(2, 2);
+  Result.ProportionScale := TSizeF.Create(1, 1);
+
+  Result.ContentFill := TRectLayoutContentFill.None;
+  Result.Tile := false;
+  Result.TileFlags := [TRectLayoutTileFlag.ExtendX, TRectLayoutTileFlag.ExtendY];
+
+  Result.MarginTile := 0;
+  Result.MarginParent := 0;
+  Result.MarginsELF := 0;
 end;
 
 end.

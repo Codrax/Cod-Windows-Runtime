@@ -329,6 +329,10 @@ begin
         TextFormat := TextFormat + [tfBottom];
       if TTextFlag.NoClip in Flags then
         TextFormat := TextFormat + [tfNoClip];
+      if TTextFlag.Ellipsis in Flags then
+        TextFormat := TextFormat + [tfEndEllipsis];
+      if not (TTextFlag.ShowAccelChar in Flags) then
+        TextFormat := TextFormat + [tfNoPrefix];
 
       Canvas.TextRect(ARect, Text, TextFormat);
     end;

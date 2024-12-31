@@ -49,6 +49,11 @@ type
     /// <summary> Compares is two arrays are equal. </summary>
     class function CheckEquality(const First, Second: TArray<T>) : boolean;
 
+    /// <summary> Create a copy of the array. </summary>
+    class function CreateCopy(const Source: TArray<T>): TArray<T>;
+    /// <summary> Create a copy of the array. </summary>
+    class procedure CopyTo(const Source: TArray<T>; var Destination: TArray<T>);
+
     /// <summary> Get the index if element x. </summary>
     class function GetIndex(const x: T; const Values: TArray<T>): integer; overload;
     /// <summary> Get the index if element with a callback to see if the item was found. </summary>
@@ -231,6 +236,12 @@ begin
       Exit(true);
 end;
 
+class procedure TArrayUtils<T>.CopyTo(const Source: TArray<T>;
+  var Destination: TArray<T>);
+begin
+  Destination := Copy(Source, 0, Length(Source));
+end;
+
 class function TArrayUtils<T>.Contains(const x: T; const Values: TArray<T>): boolean;
 var
   y : T;
@@ -248,6 +259,11 @@ end;
 class function TArrayUtils<T>.Count(const Values: TArray<T>): integer;
 begin
   Result := Length(Values);
+end;
+
+class function TArrayUtils<T>.CreateCopy(const Source: TArray<T>): TArray<T>;
+begin
+  Result := Copy(Source, 0, Length(Source));
 end;
 
 class procedure TArrayUtils<T>.Delete(const Index: integer;
