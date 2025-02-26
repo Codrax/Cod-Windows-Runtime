@@ -20,6 +20,7 @@ interface
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes, 
   System.Types, Math, Vcl.Forms, IOUtils, System.Generics.Collections, 
   ActiveX, ComObj, Cod.ArrayHelpers, TypInfo, DateUtils, ShlObj, Rtti,
+  Vcl.Graphics,
 
   // Windows RT (Runtime)
   Win.WinRT,
@@ -35,327 +36,374 @@ interface
   Winapi.CommonTypes,
   Winapi.Foundation;
 
-  type
-    {$SCOPEDENUMS OFF}
-    TWinBoolean = (WinDefault, WinFalse, WinTrue);
-    TWinBool = TWinBoolean;
-    {$SCOPEDENUMS ON}
+type
+  {$SCOPEDENUMS OFF}
+  TWinBoolean = (WinDefault, WinFalse, WinTrue);
+  TWinBool = TWinBoolean;
+  {$SCOPEDENUMS ON}
 
-    TWinBooleanHelper = record helper for TWinBoolean
-      class function Create(Value: boolean): TWinBoolean; overload; static; inline;
+  TWinBooleanHelper = record helper for TWinBoolean
+    class function Create(Value: boolean): TWinBoolean; overload; static; inline;
 
-      function Initiated: boolean;
-      function ToBoolean(Default: boolean = false): boolean;
-      function ToInteger(Default: integer = 0): integer;
-      function ToString: string;
-    end;
+    function Initiated: boolean;
+    function ToBoolean(Default: boolean = false): boolean;
+    function ToInteger(Default: integer = 0): integer;
+    function ToString: string;
+  end;
 
-    // TAsyncAwait
-    TAsyncAwait = class(TInspectableObject)
-    private
-      FTriggered: boolean;
+  // TAsyncAwait
+  TAsyncAwait = class(TInspectableObject)
+  private
+    FTriggered: boolean;
 
-    protected
-      procedure Trigger; virtual;
+  protected
+    procedure Trigger; virtual;
 
-    public
-      const DEFAULT_TIME_STEP = 10;
+  public
+    const DEFAULT_TIME_STEP = 10;
 
-      procedure Reset; virtual;
+    procedure Reset; virtual;
 
-      procedure Await; overload;
-      procedure AwaitCounted(Callback: TProc);
-      procedure AwaitSleep(Amount: integer);
+    procedure Await; overload;
+    procedure AwaitCounted(Callback: TProc);
+    procedure AwaitSleep(Amount: integer);
 
-      // Class utils
-      class procedure Await(const asyncInfo: IInterface; TimeStep: cardinal=DEFAULT_TIME_STEP); overload;
-      class procedure Await(const asyncInfo: IInterface; TimeStep: cardinal; const AApplicationProcessMessage: TApplicationProcessMessagesProc); overload;
+    // Class utils
+    class procedure Await(const asyncInfo: IInterface; TimeStep: cardinal=DEFAULT_TIME_STEP); overload;
+    class procedure Await(const asyncInfo: IInterface; TimeStep: cardinal; const AApplicationProcessMessage: TApplicationProcessMessagesProc); overload;
 
-      // Constructors
-      constructor Create;
-    end;
+    // Constructors
+    constructor Create;
+  end;
 
-    TAsyncAwaitResult<T> = class(TAsyncAwait)
-    var
-      FInternalResultValue: T;
+  TAsyncAwaitResult<T> = class(TAsyncAwait)
+  var
+    FInternalResultValue: T;
 
-    protected
-      // Default
-      procedure ClearValue; virtual;
+  protected
+    // Default
+    procedure ClearValue; virtual;
 
-    public
-      /// <summary>
-      /// Reset the await event for next use. This must be done manually and cannot
-      /// be called in Reset() because in the timeframe that this event is
-      /// assigned and when GetResults() is called, Trigger() could have
-      /// allready been called. In which case Await() would be stuck in a loop.
-      /// </summary>
-      procedure Reset; override;
+  public
+    /// <summary>
+    /// Reset the await event for next use. This must be done manually and cannot
+    /// be called in Reset() because in the timeframe that this event is
+    /// assigned and when GetResults() is called, Trigger() could have
+    /// allready been called. In which case Await() would be stuck in a loop.
+    /// </summary>
+    procedure Reset; override;
 
-      // Get results
-      function GetResults: T;
-    end;
+    // Get results
+    function GetResults: T;
+  end;
 
-    // Subscription based event
-    TSubscriptionEventHandlerBase = class(TInspectableObject)
-    private
-      FSubscribed: boolean;
-      FToken: EventRegistrationToken;
+  // Subscription based event
+  TSubscriptionEventHandlerBase = class(TInspectableObject)
+  private
+    FSubscribed: boolean;
+    FToken: EventRegistrationToken;
+    FAlwaysSubscribed: boolean;
+    procedure SetAlwaysSubscribed(const Value: boolean);
 
-    protected
-      property Token: EventRegistrationToken read FToken write FToken;
+  protected
+    property Token: EventRegistrationToken read FToken write FToken;
 
-      ///  <summary>
-      ///  Re-subscribe to the notification event. Used when the notification is reset
-      ///  </summary>
-      procedure Resubscribe; virtual;
-      ///  <summary>
-      ///  Attempt to unsubscribe token if one is registered.
-      ///  </summary>
-      procedure TryUnsubscribe;
+    ///  <summary>
+    ///  Re-subscribe to the notification event. Used when the notification is reset
+    ///  </summary>
+    procedure Resubscribe; virtual;
+    ///  <summary>
+    ///  Attempt to unsubscribe token if one is registered.
+    ///  </summary>
+    procedure TryUnsubscribe;
 
-      // Override
-      ///  <summary>
-      ///  Subscribe to the notification event
-      ///  </summary>
-      procedure Subscribe; virtual;
-      ///  <summary>
-      ///  Unsubscribe from the notification event
-      ///  </summary>
-      procedure Unsubscribe; virtual; // inherited; must be called after the token is unregistered!!
+    // Override
+    ///  <summary>
+    ///  Subscribe to the notification event
+    ///  </summary>
+    procedure Subscribe; virtual;
+    ///  <summary>
+    ///  Unsubscribe from the notification event
+    ///  </summary>
+    procedure Unsubscribe; virtual; // inherited; must be called after the token is unregistered!!
 
-    public
-      // Use a FSubscribed variabile to avoid unsubscibe recursion caused by low ref count.
-      property Subscribed: boolean read FSubscribed;
+    ///  <summary>
+    ///  The event will not be unsubscribed by changes in callbacks.
+    ///  </summary>
+    property AlwaysSubscribed: boolean read FAlwaysSubscribed write SetAlwaysSubscribed;
 
-      class procedure TryMultiUnsubscribe(Items: TArray<TSubscriptionEventHandlerBase>);
+  public
+    // Use a FSubscribed variabile to avoid unsubscibe recursion caused by low ref count.
+    property Subscribed: boolean read FSubscribed;
 
-      // Constructors
-      constructor Create;
-      destructor Destroy; override;
-    end;
+    class procedure TryMultiUnsubscribe(Items: TArray<TSubscriptionEventHandlerBase>);
 
-    TCurrentProcess = class
-    public
-      class procedure SetAppUserModelID(Value: string); static;
-      class function GetAppUserModelID: string; static;
+    // Constructors
+    constructor Create;
+    destructor Destroy; override;
+  end;
 
-      class function GetAppExecutable: string; static;
-    end;
+  TCurrentProcess = class
+  public
+    class procedure SetAppUserModelID(Value: string); static;
+    class function GetAppUserModelID: string; static;
 
-    TSubscriptionEventHandler<ParentType; NotifyType> = class(TSubscriptionEventHandlerBase)
-    private
-      FParent: ParentType;
-      FCalls: TArray<NotifyType>;
+    class function GetAppExecutable: string; static;
 
-      // Utils
-      procedure CallsListChanged;
+    class function GetAppModuleName: string; static;
+  end;
 
-      // Getters
-      function GetCount: integer;
-      function GetItem(Index: integer): NotifyType;
+  TSubscriptionEventHandler<ParentType; NotifyType> = class(TSubscriptionEventHandlerBase)
+  private
+    FParent: ParentType;
+    FCalls: TArray<NotifyType>;
 
-    protected
-      property Parent: ParentType read FParent write FParent;
+    // Utils
+    procedure CallsListChanged;
+
+    // Getters
+    function GetCount: integer;
+    function GetItem(Index: integer): NotifyType;
+
+  protected
+    property Parent: ParentType read FParent write FParent;
+
+    // Declare a procedure to invoke the events here
+
+  public
+    // Subscription manager
+    property Count: integer read GetCount;
+    property Items[Index: integer]: NotifyType read GetItem;
       
-      // Declare a procedure to invoke the events here
+    procedure Add(ACallback: NotifyType);
+    procedure Remove(ACallback: NotifyType);
+    function Exists(ACallback: NotifyType): boolean;
 
-    public
-      // Subscription manager
-      property Count: integer read GetCount;
-      property Items[Index: integer]: NotifyType read GetItem;
-      
-      procedure Add(ACallback: NotifyType);
-      procedure Remove(ACallback: NotifyType);
-      function Exists(ACallback: NotifyType): boolean;
+    procedure RemoveAll;
 
-      procedure RemoveAll;
+    // Constructors
+    constructor Create(const AParent: ParentType); virtual;
+    destructor Destroy; override;
+  end;
 
-      // Constructors
-      constructor Create(const AParent: ParentType); virtual;
-      destructor Destroy; override;
-    end;
+  // Instance factory
+  TInstanceFactory = class
+  public
+    class function CreateNamed(Name: string): IInspectable; overload;
+    class function CreateNamed<T: IInspectable>(Name: string): T; overload;
 
-    // Instance factory
-    TInstanceFactory = class
-    public
-      class function CreateNamed(Name: string): IInspectable; overload;
-      class function CreateNamed<T: IInspectable>(Name: string): T; overload;
+    class function CreateFactory(IID: TGUID; Name: string): IInspectable; overload;
+    class function CreateFactory<T: IInspectable>(IID: TGUID; Name: string): T; overload;
 
-      class function CreateFactory(IID: TGUID; Name: string): IInspectable; overload;
-      class function CreateFactory<T: IInspectable>(IID: TGUID; Name: string): T; overload;
+    // Query
+    class function CreateNamedAndQuery<T: IInspectable>(Name: string; GUID: TGUID): T; overload;
+    class function Query<T: IInspectable>(Instance: IInspectable; GUID: TGUID): T;
 
-      // Query
-      class function CreateNamedAndQuery<T: IInspectable>(Name: string; GUID: TGUID): T; overload;
-      class function Query<T: IInspectable>(Instance: IInspectable; GUID: TGUID): T;
+    // GUID
+    class function GetGUID<T: IInspectable>: TGUID;
 
-      // GUID
-      class function GetGUID<T: IInspectable>: TGUID;
+    // Info
+    class function Supports(Instance: IInspectable; GUID: TGUID): boolean;
+  end;
 
-      // Info
-      class function Supports(Instance: IInspectable; GUID: TGUID): boolean;
-    end;
+  // GUID Reader
+  TGuidReader<T> = class
+    class function GetGUID: TGUID;
+    class function GetGUIDAsString: string;
+  end;
 
-    // GUID Reader
-    TGuidReader<T> = class
-      class function GetGUID: TGUID;
-      class function GetGUIDAsString: string;
-    end;
+  // Com importer
+  TWinRTGUIDAttribute = class(TCustomAttribute)
+  private
+    FSignature: string;
+  public
+    constructor Create(const StringGUID: string);
+    /// <summary>Gets the signature of the Class</summary>
+    property Signature: string read FSignature;
+  end;
 
-    // Helper for TimeSpan
-    TimeSpanHelper = record helper for TimeSpan
-      constructor Create(ADuration: int64);
-      constructor CreateMilliseconds(Milliseconds: int64);
-      constructor CreateSeconds(Seconds: extended);
-      constructor CreateTime(Time: TTime);
+  TComObjGenericImort<I: IUnknown> = class
+  protected
+    class function GetCLSID: TGUID;
+  public
+    class function Create: I; static;
+  end;
 
-      function ToMilliseconds: int64;
-      function ToSeconds: extended;
-      function ToTime: TTime;
-    end;
+  // Helper for TimeSpan
+  TimeSpanHelper = record helper for TimeSpan
+    constructor Create(ADuration: int64);
+    constructor CreateMilliseconds(Milliseconds: int64);
+    constructor CreateSeconds(Seconds: extended);
+    constructor CreateTime(Time: TTime);
 
-    // Re-names
-    TXMLInterface = Xml_Dom_IXmlDocument;
+    function ToMilliseconds: int64;
+    function ToSeconds: extended;
+    function ToTime: TTime;
+  end;
 
-    // WinXML custom document management
-    TWinXMLNodes = class;
-    TWinXMLAttributes = class;
+  // String vector
+  TStringVectorManager = class
+    class procedure WriteArrayTo(Items: TArray<string>; AVector: IVector_1__HSTRING); overload;
+    class procedure AppendArrayTo(Items: TArray<string>; AVector: IVector_1__HSTRING); overload;
 
-    TWinXMLNode = class(TObject)
-    private
-      FTagName: string;
-      FParent: TWinXMLNode;
+    class function ToArray(AVector: IVector_1__HSTRING): TArray<string>; overload;
+    class function ToArray(AVector: IVectorView_1__HSTRING): TArray<string>; overload;
+  end;
 
-      FContents: string; // content of the node, pre-other nodes
-      FNodes: TWinXMLNodes;
-      FAttributes: TWinXMLAttributes;
-    procedure SetTagName(const Value: string);
-    public
-      property TagName: string read FTagName write SetTagName;
-      property Parent: TWinXMLNode read FParent;
+  TRandomAccessStreamReferenceManager = class
+    class function WriteGraphic(Graphic: TGraphic): IRandomAccessStreamReference;
+    class function ReadGraphic(Source: IRandomAccessStreamReference): TGraphic;
 
-      property Contents: string read FContents write FContents;
-      property Nodes: TWinXMLNodes read FNodes write FNodes;
-      property Attributes: TWinXMLAttributes read FAttributes write FAttributes;
+    class function WriteFile(FilePath: string): IRandomAccessStreamReference;
+  end;
 
-      // Utils
-      procedure Delete;
-      procedure Detach;
+  // Re-names
+  TXMLInterface = Xml_Dom_IXmlDocument;
 
-      // Convert
-      function OuterXML: string;
-      function InnerXML: string;
-      function ToString: string; override;
+  // WinXML custom document management
+  TWinXMLNodes = class;
+  TWinXMLAttributes = class;
 
-      // Constructors
-      constructor Create; virtual;
-      destructor Destroy; override;
-    end;
+  TWinXMLNode = class(TObject)
+  private
+    FTagName: string;
+    FParent: TWinXMLNode;
 
-    TWinXMLAttribute = record
-      Tag: string;
-      Value: string;
-    end;
-    TWinXMLNodes = class
-    private
-      FNodes: TArray<TWinXMLNode>;
-      FNodeManager: TWinXMLNode;
+    FContents: string; // content of the node, pre-other nodes
+    FNodes: TWinXMLNodes;
+    FAttributes: TWinXMLAttributes;
+  procedure SetTagName(const Value: string);
+  public
+    property TagName: string read FTagName write SetTagName;
+    property Parent: TWinXMLNode read FParent;
 
-      function GetNode(Index: integer): TWinXMLNode;
-    public
-      function Count: integer;
+    property Contents: string read FContents write FContents;
+    property Nodes: TWinXMLNodes read FNodes write FNodes;
+    property Attributes: TWinXMLAttributes read FAttributes write FAttributes;
 
-      // Parent manage
-      function DetachNode(Index: integer): boolean; overload;
-      function DetachNode(Node: TWinXMLNode): boolean; overload;
+    // Utils
+    procedure Delete;
+    procedure Detach;
 
-      procedure AttachNode(Node: TWinXMLNode); // add existing node clas
+    // Convert
+    function OuterXML: string;
+    function InnerXML: string;
+    function ToString: string; override;
 
-      // Manage node
-      function FindNode(TagName: string): integer; overload;
-      function FindNode(Node: TWinXMLNode): integer; overload;
-      function HasNode(TagName: string): boolean;
-      function DeleteNode(Index: integer): boolean; overload;
-      function DeleteNode(Node: TWinXMLNode): boolean; overload;
+    // Constructors
+    constructor Create; virtual;
+    destructor Destroy; override;
+  end;
 
-      // Create node
-      function AddNode(TagName: string): TWinXMLNode; overload;
+  TWinXMLAttribute = record
+    Tag: string;
+    Value: string;
+  end;
+  TWinXMLNodes = class
+  private
+    FNodes: TArray<TWinXMLNode>;
+    FNodeManager: TWinXMLNode;
 
-      procedure Clear;
+    function GetNode(Index: integer): TWinXMLNode;
+  public
+    function Count: integer;
 
-      property Nodes[Index: integer]: TWinXMLNode read GetNode; default;
+    // Parent manage
+    function DetachNode(Index: integer): boolean; overload;
+    function DetachNode(Node: TWinXMLNode): boolean; overload;
 
-      constructor Create(ForNode: TWinXMLNode);
-      destructor Destroy; override;
-    end;
-    TWinXMLAttributes = class
-    private
-      FAttributes: TArray<TWinXMLAttribute>;
+    procedure AttachNode(Node: TWinXMLNode); // add existing node clas
 
-    public
-      function Count: integer;
+    // Manage node
+    function FindNode(TagName: string): integer; overload;
+    function FindNode(Node: TWinXMLNode): integer; overload;
+    function HasNode(TagName: string): boolean;
+    function DeleteNode(Index: integer): boolean; overload;
+    function DeleteNode(Node: TWinXMLNode): boolean; overload;
 
-      function FindAttribute(ATag: string): integer;
-      function HasAttribute(ATag: string): boolean;
-      function DeleteAttribute(Index: integer): boolean; overload;
-      function DeleteAttribute(ATag: string): boolean; overload;
+    // Create node
+    function AddNode(TagName: string): TWinXMLNode; overload;
 
-      function GetAttribute(Tag: string): string; overload;
-      function GetAttribute(Index: integer): string; overload;
-      function GetAttributeTag(Index: integer): string;
-      procedure SetAttribute(Tag: string; const Value: string);
+    procedure Clear;
 
-      property Attributes[Tag: string]: string read GetAttribute write SetAttribute; default;
+    property Nodes[Index: integer]: TWinXMLNode read GetNode; default;
 
-      constructor Create;
-    end;
+    constructor Create(ForNode: TWinXMLNode);
+    destructor Destroy; override;
+  end;
+  TWinXMLAttributes = class
+  private
+    FAttributes: TArray<TWinXMLAttribute>;
 
-    TWinXMLDocument = class(TWinXMLNode)
-      constructor Create; override;
-    end;
+  public
+    function Count: integer;
 
-    // DomXMLDocument
-    TDomXMLDocument = class(TObject)
-    public
-      DomXML: TXMLInterface;
+    function FindAttribute(ATag: string): integer;
+    function HasAttribute(ATag: string): boolean;
+    function DeleteAttribute(Index: integer): boolean; overload;
+    function DeleteAttribute(ATag: string): boolean; overload;
 
-      // Convert
-      procedure Parse(XMLDocument: string);
-      function Format: string;
+    function GetAttribute(Tag: string): string; overload;
+    function GetAttribute(Index: integer): string; overload;
+    function GetAttributeTag(Index: integer): string;
+    procedure SetAttribute(Tag: string; const Value: string);
 
-      // Constructors
-      constructor Create; overload;
-      constructor Create(FromString: string); overload;
-      constructor Create(FromInterface: TXMLInterface); overload;
-      destructor Destroy; override;
-    end;
+    property Attributes[Tag: string]: string read GetAttribute write SetAttribute; default;
 
-    // Helpers
-    HStringHelper = record helper for HSTRING
-      constructor Create(S: string);
+    constructor Create;
+  end;
 
-      function CompareTo(Value: HString): TValueRelationship;
-      function Length: cardinal;
-      function Empty: boolean;
+  TWinXMLDocument = class(TWinXMLNode)
+    constructor Create; override;
+  end;
 
-      function ToString: string;
-      procedure Free;
+  // DomXMLDocument
+  TDomXMLDocument = class(TObject)
+  public
+    DomXML: TXMLInterface;
 
-      function ToStringAndDestroy: string;
-    end;
+    // Convert
+    procedure Parse(XMLDocument: string);
+    function Format: string;
 
-  // HString
-  function StringToHString(Value: string): HSTRING; // Needs to be freed with WindowsDeleteString
-  function HStringToString(AString: HSTRING): string;
-  procedure FreeHString(AString: HSTRING);
+    // Constructors
+    constructor Create; overload;
+    constructor Create(FromString: string); overload;
+    constructor Create(FromInterface: TXMLInterface); overload;
+    destructor Destroy; override;
+  end;
+
+  // Helpers
+  HStringHelper = record helper for HSTRING
+    constructor Create(S: string);
+
+    function CompareTo(Value: HString): TValueRelationship;
+    function Length: cardinal;
+    function Empty: boolean;
+
+    function ToString: string;
+    procedure Free;
+
+    function ToStringAndDestroy: string;
+  end;
+
+// HString
+function StringToHString(Value: string): HSTRING; // Needs to be freed with WindowsDeleteString
+function HStringToString(AString: HSTRING): string;
+procedure FreeHString(AString: HSTRING);
 
 implementation
 
+// Call units
+uses
+  Cod.WindowsRT.Storage,
+  Cod.WindowsRT.MiscUtil;
+
 function StringToHString(Value: string): HSTRING;
-begin            
+begin
   if Failed(
     WindowsCreateString(PWideChar(Value), Length(Value), Result)
-  ) then 
+  ) then
     raise Exception.CreateFmt('Unable to create HString for %s', [ Value ] );
 end;
 
@@ -898,7 +946,7 @@ end;
 
 procedure TSubscriptionEventHandler<ParentType, NotifyType>.CallsListChanged;
 begin
-  const SubscriptionNeeded = Length(FCalls) > 0;
+  const SubscriptionNeeded = (Length(FCalls) > 0) or AlwaysSubscribed;
   if SubscriptionNeeded = Subscribed then
     Exit;
 
@@ -984,6 +1032,15 @@ begin
   if Subscribed then
     Unsubscribe;
   Subscribe;
+end;
+
+procedure TSubscriptionEventHandlerBase.SetAlwaysSubscribed(
+  const Value: boolean);
+begin
+  FAlwaysSubscribed := Value;
+
+  if Value and not Subscribed then
+    Subscribe;
 end;
 
 procedure TSubscriptionEventHandlerBase.Subscribe;
@@ -1134,6 +1191,11 @@ begin
   Result := Application.ExeName;
 end;
 
+class function TCurrentProcess.GetAppModuleName: string;
+begin
+  Result := ExtractFileName( Application.ExeName );
+end;
+
 class function TCurrentProcess.GetAppUserModelID: string;
 var
   Value: PChar;
@@ -1193,6 +1255,147 @@ const
   MillisecondsPerDay = 86400000; // 24 * 60 * 60 * 1000
 begin
   Result := ToMilliseconds / MillisecondsPerDay;
+end;
+
+{ TComObjGenericImort<I> }
+
+class function TComObjGenericImort<I>.Create: I;
+begin
+  Result := I(CreateComObject( GetCLSID ));
+end;
+
+class function TComObjGenericImort<I>.GetCLSID: TGUID;
+var
+  RttiContext: TRttiContext;
+  RttiType: TRttiType;
+  Attributes: TArray<TCustomAttribute>;
+  WinRTGUIDAttr: TCustomAttribute;
+begin
+  // Initialize the RTTI context
+  RttiContext := TRttiContext.Create;
+  try
+    // Get the RTTI type for the interface
+    RttiType := RttiContext.GetType(TypeInfo(I));
+
+    // Get the attributes of the interface
+    Attributes := RttiType.GetAttributes;
+
+    // Iterate through the attributes to find TWinRTGUIDAttribute
+    for WinRTGUIDAttr in Attributes do
+      if WinRTGUIDAttr is TWinRTGUIDAttribute then
+        Exit( TGUID.Create( TWinRTGUIDAttribute(WinRTGUIDAttr).Signature )  );
+  finally
+    RttiContext.Free;
+  end;
+
+  // If no attribute found, raise an exception or return a default GUID
+  raise Exception.Create('CLSID not found for the specified interface.');
+end;
+
+{ TWinRTGUIDAttribute }
+
+constructor TWinRTGUIDAttribute.Create(const StringGUID: string);
+begin
+  FSignature := StringGUID;
+end;
+
+{ TStringVectorManager }
+
+class function TStringVectorManager.ToArray(
+  AVector: IVector_1__HSTRING): TArray<string>;
+begin
+  SetLength(Result, AVector.Size);
+  for var I := 0 to AVector.Size-1 do
+    Result[I] := AVector.GetAt(I).ToStringAndDestroy;
+end;
+
+class procedure TStringVectorManager.AppendArrayTo(Items: TArray<string>;
+  AVector: IVector_1__HSTRING);
+begin
+  for var I := 0 to High(Items) do
+    AVector.Append( HString.Create(Items[I]) );
+end;
+
+class function TStringVectorManager.ToArray(
+  AVector: IVectorView_1__HSTRING): TArray<string>;
+begin
+  SetLength(Result, AVector.Size);
+  for var I := 0 to AVector.Size-1 do
+    Result[I] := AVector.GetAt(I).ToStringAndDestroy;
+end;
+
+class procedure TStringVectorManager.WriteArrayTo(Items: TArray<string>;
+  AVector: IVector_1__HSTRING);
+begin
+  AVector.Clear;
+  AppendArrayTo(Items, AVector);
+end;
+
+{ TRandomAccessStreamReferenceManager }
+
+class function TRandomAccessStreamReferenceManager.ReadGraphic(
+  Source: IRandomAccessStreamReference): TGraphic;
+var
+  RandomAccessStreamWithContentType: IRandomAccessStreamWithContentType;
+begin
+  // Get data async
+  const Operation = Source.OpenReadAsync;
+  TAsyncAwait.Await( Operation );
+  RandomAccessStreamWithContentType := Operation.GetResults;
+
+  // Read to bytes
+  const Bytes = RandomAccessStreamGetContents( TInstanceFactory.Query<IRandomAccessStream>(RandomAccessStreamWithContentType, IRandomAccessStream) );
+
+  // Result
+  const S = TMemoryStream.Create;
+  try
+    S.Write(Bytes, Length(Bytes));
+    Result := LoadGraphicFromStream(S);
+  finally
+    S.Free;
+  end;
+end;
+
+class function TRandomAccessStreamReferenceManager.WriteFile(
+  FilePath: string): IRandomAccessStreamReference;
+begin
+  const S = TFileStream.Create(FilePath, fmOpenRead);
+  var Bytes: TBytes;
+  try
+    SetLength(Bytes, S.Size);
+
+    S.Position := 0;
+    S.ReadData(@Bytes[0], S.Size);
+  finally
+    S.Free;
+  end;
+
+  // Create stream
+  Result := TRandomAccessStreamReference.CreateFromStream(RandomAccessStreamMakeWithData(Bytes));
+end;
+
+class function TRandomAccessStreamReferenceManager.WriteGraphic(
+  Graphic: TGraphic): IRandomAccessStreamReference;
+var
+  RandomAccessStream: IRandomAccessStream;
+begin
+  const S = TMemoryStream.Create;
+  var Bytes: TBytes;
+  try
+    Graphic.SaveToStream(S);
+
+    SetLength(Bytes, S.Size);
+
+    S.Position := 0;
+    S.ReadData(@Bytes[0], S.Size);
+  finally
+    S.Free;
+  end;
+
+  RandomAccessStream := RandomAccessStreamMakeWithData(Bytes);
+
+  // Create stream
+  Result := TRandomAccessStreamReference.CreateFromStream(RandomAccessStream);
 end;
 
 end.

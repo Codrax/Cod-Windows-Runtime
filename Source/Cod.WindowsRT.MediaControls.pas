@@ -1168,23 +1168,7 @@ var
 begin
   if not HasThumbnail then
     Exit(nil);
-
-  // Get data async
-  const Operation = FInterface.Thumbnail.OpenReadAsync;
-  TAsyncAwait.Await( Operation );
-  RandomAccessStreamWithContentType := Operation.GetResults;
-
-  // Read to bytes
-  const Bytes = RandomAccessStreamGetContents( TInstanceFactory.Query<IRandomAccessStream>(RandomAccessStreamWithContentType, IRandomAccessStream) );
-
-  // Result
-  const S = TMemoryStream.Create;
-  try
-    S.Write(Bytes, Length(Bytes));
-    Result := LoadGraphicFromStream(S);
-  finally
-    S.Free;
-  end;
+  Result := TRandomAccessStreamReferenceManager.ReadGraphic( FInterface.Thumbnail );
 end;
 
 function TSystemMediaControlsMediaInformation.GetTitle: string;
@@ -1735,28 +1719,10 @@ begin
 end;
 
 function TTransportCompatibleClass.GetThumbnail: TGraphic;
-var
-  RandomAccessStreamWithContentType: IRandomAccessStreamWithContentType;
 begin
   if Updater.Thumbnail = nil then
     Exit(nil);
-
-  // Get data async
-  const Operation = Updater.Thumbnail.OpenReadAsync;
-  TAsyncAwait.Await( Operation );
-  RandomAccessStreamWithContentType := Operation.GetResults;
-
-  // Read to bytes
-  const Bytes = RandomAccessStreamGetContents( TInstanceFactory.Query<IRandomAccessStream>(RandomAccessStreamWithContentType, IRandomAccessStream) );
-
-  // Result
-  const S = TMemoryStream.Create;
-  try
-    S.Write(Bytes, Length(Bytes));
-    Result := LoadGraphicFromStream(S);
-  finally
-    S.Free;
-  end;
+  Result := TRandomAccessStreamReferenceManager.ReadGraphic(Updater.Thumbnail);
 end;
 
 procedure TTransportCompatibleClass.PushTimeline;
@@ -1842,26 +1808,8 @@ begin
 end;
 
 procedure TTransportCompatibleClass.SetThumbnail(const Value: TGraphic);
-var
-  RandomAccessStream: IRandomAccessStream;
 begin
-  const S = TMemoryStream.Create;
-  var Bytes: TBytes;
-  try
-    Value.SaveToStream(S);
-
-    SetLength(Bytes, S.Size);
-
-    S.Position := 0;
-    S.ReadData(@Bytes[0], S.Size);
-  finally
-    S.Free;
-  end;
-
-  RandomAccessStream := RandomAccessStreamMakeWithData(Bytes);
-
-  // Set thumbnail
-  Updater.Thumbnail := TRandomAccessStreamReference.CreateFromStream(RandomAccessStream);
+  Updater.Thumbnail := TRandomAccessStreamReferenceManager.WriteGraphic(Value);
 end;
 
 procedure TTransportCompatibleClass.UpdateInformation;

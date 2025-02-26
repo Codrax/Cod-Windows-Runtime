@@ -30,20 +30,26 @@ uses
   // Cod Utils
   Cod.Files,
   Cod.SysUtils,
+  Cod.Windows,
   Cod.WindowsRT,
   Cod.ArrayHelpers,
   Cod.Registry;
 
 type
+  TRegistrationOption = (StartMenu, Registry);
+  TRegistrationOptions = set of TRegistrationOption;
+
   TAppRegistration = class
   private
     FAppUserModelID: string;
     FAppName: string;
+    FWantsAppIconPath: boolean;
     FAppIconPath: string;
     FAppDescription: string;
     FAppLaunchArguments: string;
     FAppExecutable: string;
     FAppShowInSettings: TWinBool;
+    FRegOptions: TRegistrationOptions;
 
     // App icon
     function GetAppIconCachePath: string;
@@ -53,12 +59,6 @@ type
     // Internal
     function GetRegistryKey(Global: boolean): string;
     function GetAppIconPath: string;
-
-    // Registered
-    function RegisteredStartMenu(Global: boolean): boolean;
-    function RegisteredRegistry(Global: boolean): boolean;
-
-    function PartiallyRegistered(Global: boolean): boolean; // partially registered
 
   protected
     // App
@@ -78,13 +78,22 @@ type
     procedure RegisterRegistryClass(DoRegister: boolean; Global: boolean);
     procedure RegisterStartMenuClass(DoRegister: boolean; Global: boolean);
 
+    // Registered
+    function RegisteredStartMenu(Global: boolean): boolean;
+    function RegisteredRegistry(Global: boolean): boolean;
+
+    function PartiallyRegistered(Global: boolean): boolean; // partially registered
+
   public
     // For system use
     property AppUserModelID: string read GetAppUserModelID write SetAppUserModelID;
     property AppExecutable: string read GetAppExecutable write SetAppExecutable;
 
+    property RegistrationOptions: TRegistrationOptions read FRegOptions write FRegOptions;
+
     // For start menu
     property AppName: string read GetAppName write SetAppName;
+    property WantsAppIconPath: boolean read FWantsAppIconPath write FWantsAppIconPath;
     property AppIconPath: string read GetAppIconPath write FAppIconPath; // also supports proper icon formating, such as "C:\icon.ico, 2". Where 2 is the index
     property AppDescription: string read FAppDescription write FAppDescription;
     property AppLaunchArguments: string read FAppLaunchArguments write FAppLaunchArguments;
@@ -102,6 +111,9 @@ type
 
     // Required administrator privileges
     procedure UnRegisterAll;
+
+    // Constructors
+    constructor Create;
   end;
 
   TCurrentAppRegistration = class(TAppRegistration)
@@ -200,6 +212,13 @@ end;
 
 { TAppRegistration }
 
+constructor TAppRegistration.Create;
+begin
+  // Init
+  FWantsAppIconPath := true;
+  FRegOptions := [TRegistrationOption.StartMenu, TRegistrationOption.Registry];
+end;
+
 function TAppRegistration.CreateAppIconCache: string;
 begin
   Result := GetAppIconCachePath;
@@ -226,18 +245,24 @@ begin
 end;
 
 function TAppRegistration.GetAppIconCachePath: string;
-const
-  NOTIF_FOLDER = 'C:\Users\Codrut\AppData\Local\Microsoft\Windows\Notifications\ActionCenter\';
+var
+  NotifFolder: string;
 begin
-  Result := Format('%S%S.ico', [NOTIF_FOLDER, AppUserModelID]);
+  NotifFolder := IncludeTrailingPathDelimiter(
+    ReplaceEnviromentVariabiles('%localappdata%')
+    ) + 'Microsoft\Windows\Notifications\ActionCenter';
 
-  if not TDirectory.Exists(NOTIF_FOLDER) then
-    TDirectory.CreateDirectory(NOTIF_FOLDER);
+  // Result
+  Result := Format('%S\%S.ico', [NotifFolder, AppUserModelID]);
+
+  // Ensure directory valid
+  if not TDirectory.Exists(NotifFolder) then
+    TDirectory.CreateDirectory(NotifFolder);
 end;
 
 function TAppRegistration.GetAppIconPath: string;
 begin
-  if FAppIconPath <> '' then
+  if (FAppIconPath <> '') or not WantsAppIconPath then
     Result := FAppIconPath
   else
     Result := CreateAppIconCache;
@@ -293,11 +318,13 @@ begin
   if AppUserModelID = '' then
     raise Exception.Create('App User Model ID is empty.');
     
-  // Register App User Modal ID
-  RegisterStartMenuClass( true, Global );
+  // Register StartMenu App User Modal ID
+  if TRegistrationOption.StartMenu in RegistrationOptions then
+    RegisterStartMenuClass( true, Global );
 
   // Register registry
-  RegisterRegistryClass( true, Global );
+  if TRegistrationOption.Registry in RegistrationOptions then
+    RegisterRegistryClass( true, Global );
 end;
 
 function TAppRegistration.Registered(Global: boolean): boolean;
@@ -340,7 +367,7 @@ begin
       // Write values
       Registry.WriteValue(Key, REG_VALUE_NAME, GetAppName);
       const AppIcon = AppIconPath;
-      if TFile.Exists(AppIcon) then
+      if WantsAppIconPath and TFile.Exists(AppIcon) then
         Registry.WriteValue(Key, REG_VALUE_ICON, AppIconPath)
       else
         Registry.DeleteValue(Key, REG_VALUE_ICON);
@@ -401,6 +428,8 @@ procedure TAppRegistration.UnRegisterApp(Global: boolean);
 begin
   if AppUserModelID = '' then
     raise Exception.Create('App User Model ID is empty.');
+
+  // unregister all, regardless of RegistrationOptions
 
   // UnRegister App User Modal ID
   RegisterStartMenuClass( false, Global );

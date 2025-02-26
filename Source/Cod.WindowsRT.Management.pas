@@ -1,5 +1,5 @@
 {***********************************************************}
-{               Codruts Windows Media Controls              }
+{                Codruts WindowsRT Management               }
 {                                                           }
 {                        version 1.0                        }
 {                                                           }
@@ -12,7 +12,7 @@
 
 {$SCOPEDENUMS ON}
 
-unit Cod.WindowsRT.AsyncEvents;
+unit Cod.WindowsRT.Management;
 
 interface
   uses
@@ -34,6 +34,7 @@ interface
   Winapi.CommonTypes,
   Winapi.Foundation,
   Winapi.Storage.Streams,
+  Winapi.Management,
 
   // Required
   Winapi.Media,
@@ -41,30 +42,10 @@ interface
   // Cod Utils
   Cod.WindowsRT;
 
-type
-  /// Not recoomended for usage
-  ///  Please use Win.WinRT.Utils.Await() for asynchrnnous calls
+//type
+  //TDeployment_PackageManager = TDeployment_PackageManager;
 
-  // Windows.Foundation
-  TAsyncBoolean = class(TAsyncAwaitResult<boolean>,
-    Winapi.Media.AsyncOperationCompletedHandler_1__Boolean)
-  protected
-    procedure Invoke(asyncInfo: IAsyncOperation_1__Boolean; asyncStatus: AsyncStatus); safecall;
-  end;
-
-  // Winapi.Management
-  //TAsyncDeploymentProcess = class(TAsyncAwaitResult<boolean>)
 
 implementation
-
-{ TAsyncBoolean }
-
-procedure TAsyncBoolean.Invoke(asyncInfo: IAsyncOperation_1__Boolean;
-  asyncStatus: AsyncStatus);
-begin
-  FInternalResultValue := asyncInfo.GetResults;
-
-  Trigger;
-end;
 
 end.

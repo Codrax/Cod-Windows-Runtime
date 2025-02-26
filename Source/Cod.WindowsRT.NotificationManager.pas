@@ -234,6 +234,7 @@ type
     procedure Clear;
     function ValueCount: cardinal;
     function ValueExists(Key: string): boolean;
+    procedure DeleteValue(Key: string);
 
     // Manage
     property Values[Key: string]: string read GetValue write SetValue; default;
@@ -259,6 +260,7 @@ type
   TNotification = class
   private
     FPosted: boolean;
+    FHidden: boolean;
 
     // Interfaces
     FToast: IToastNotification;
@@ -309,6 +311,7 @@ type
   public
     // Data read
     property Posted: boolean read FPosted;
+    property Hidden: boolean read FHidden;
     function Content: TXMLInterface;
     ///  <summary>
     ///  Defines the time at which the popup will dissapear.
@@ -379,6 +382,7 @@ type
       AdaptiveCrop: TImageCrop=TImageCrop.Default; RemoveMargin: boolean=false);
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-progress *)
     procedure AddProgressBar(Title: TToastValue; Value: TToastValue); overload;
+    procedure AddProgressBar(Title: TToastValue; Value: TToastValue; Indeterminate: TWinBoolean); overload;
     procedure AddProgressBar(Title: TToastValue; Value: TToastValue;
       Indeterminate: TWinBoolean; ValueStringOverride: TToastValue;  Status: TToastValue); overload;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-input *)
@@ -659,6 +663,9 @@ begin
     raise Exception.Create('Notification is not visible.');
 
   FNotifier.Hide(Notification.FToast);
+
+  // Status
+  Notification.FHidden := true;
 end;
 
 procedure TNotificationManager.RebuildNotifier;
@@ -1012,6 +1019,13 @@ begin
 end;
 
 procedure TToastContentBuilder.AddProgressBar(Title, Value: TToastValue;
+  Indeterminate: TWinBoolean);
+begin
+  AddProgressBar(Title, Value, Indeterminate, TToastValueString.Create(''),
+    TToastValueString.Create(''));
+end;
+
+procedure TToastContentBuilder.AddProgressBar(Title, Value: TToastValue;
   Indeterminate: TWinBoolean; ValueStringOverride, Status: TToastValue);
 begin
   with FXMLBinding.Nodes.AddNode('progress') do begin
@@ -1126,6 +1140,9 @@ end;
 constructor TNotification.Create(XMLDocument: TDomXMLDocument);
 begin
   Initiate( XMLDocument.DomXML );
+
+  FHidden := false;
+  FPosted := false;
 end;
 
 destructor TNotification.Destroy;
@@ -1232,6 +1249,7 @@ begin
   const PrevToast6 = FToast2;
 
   // Clear
+  FHidden := false;
   FPosted := false;
 
   FToast := nil;
@@ -1375,6 +1393,17 @@ constructor TNotificationData.Create;
 begin
   // Runtime class
   Data := TInstanceFactory.CreateNamed<INotificationData>('Windows.UI.Notifications.NotificationData');
+end;
+
+procedure TNotificationData.DeleteValue(Key: string);
+begin
+  const HKey = HString.Create(Key);
+  try
+    if Data.Values.HasKey(HKey) then
+      Data.Values.Remove(HKey);
+  finally
+    HKey.Free;
+  end;
 end;
 
 destructor TNotificationData.Destroy;

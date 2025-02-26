@@ -1,5 +1,5 @@
 {***********************************************************}
-{               Codruts Windows Media Controls              }
+{     Codruts Windows Runtime ApplicationModel Resources    }
 {                                                           }
 {                        version 1.0                        }
 {                                                           }
@@ -12,14 +12,14 @@
 
 {$SCOPEDENUMS ON}
 
-unit Cod.WindowsRT.AsyncEvents;
+unit Cod.WindowsRT.ApplicationModel.Resources;
 
 interface
-  uses
+uses
   // System
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
   Vcl.Forms, IOUtils, System.Generics.Collections, Dialogs, ActiveX, ComObj,
-  DateUtils,
+  DateUtils, Math,
 
   // Graphics
   Vcl.Graphics,
@@ -29,42 +29,28 @@ interface
   Winapi.Winrt,
   Winapi.Winrt.Utils,
   Winapi.DataRT,
+  Winapi.CommonNames,
 
   // Winapi
   Winapi.CommonTypes,
   Winapi.Foundation,
   Winapi.Storage.Streams,
 
-  // Required
-  Winapi.Media,
+  // Async
+  Cod.WindowsRT.AsyncEvents,
 
   // Cod Utils
   Cod.WindowsRT;
 
 type
-  /// Not recoomended for usage
-  ///  Please use Win.WinRT.Utils.Await() for asynchrnnous calls
-
-  // Windows.Foundation
-  TAsyncBoolean = class(TAsyncAwaitResult<boolean>,
-    Winapi.Media.AsyncOperationCompletedHandler_1__Boolean)
-  protected
-    procedure Invoke(asyncInfo: IAsyncOperation_1__Boolean; asyncStatus: AsyncStatus); safecall;
+  [WinRTClassNameAttribute('Microsoft.Windows.ApplicationModel.Resources.IResourceManager')]
+  IResourceManager = interface(IRandomAccessStream)
+  ['{13741D21-87EB-11CE-8081-0080C758527E}']
   end;
 
-  // Winapi.Management
-  //TAsyncDeploymentProcess = class(TAsyncAwaitResult<boolean>)
+  TResourceManager = class(TWinRTGenericImportI<IResourceManager>) end;
+
 
 implementation
-
-{ TAsyncBoolean }
-
-procedure TAsyncBoolean.Invoke(asyncInfo: IAsyncOperation_1__Boolean;
-  asyncStatus: AsyncStatus);
-begin
-  FInternalResultValue := asyncInfo.GetResults;
-
-  Trigger;
-end;
 
 end.
