@@ -6,10 +6,11 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  Vcl.Graphics, Registry, Vcl.Dialogs, Vcl.Forms, UITypes, Types, Winapi.shlobj,
-  Cod.Registry, IOUtils, ActiveX, ComObj, ShellApi, Cod.ColorUtils, PsApi,
-  Vcl.Imaging.pngimage, Cod.Graphics, Cod.Files, Cod.Types, Cod.MesssageConst,
-  Winapi.TlHelp32, Cod.Windows.ThemeApi, Cod.SysUtils, Winapi.PropKey, Winapi.PropSys;
+  Vcl.Graphics, Win.Registry, Vcl.Dialogs, Vcl.Forms, UITypes, Types,
+  Winapi.shlobj, Cod.Registry, IOUtils, Winapi.ActiveX, Win.ComObj,
+  Winapi.ShellApi, Cod.ColorUtils, Winapi.PsApi, Vcl.Imaging.pngimage,
+  Cod.Graphics, Cod.Files, Cod.Types, Cod.MesssageConst, Winapi.TlHelp32,
+  Cod.Windows.ThemeApi, Cod.SysUtils, Winapi.PropKey, Winapi.PropSys;
 
 type
   // Cardinals
@@ -214,7 +215,8 @@ procedure OpenWindowsUWPApp(AppURI: string);
 procedure ShutDownWindows;
 
 { File and Folder Related Tasks }
-procedure CreateShortcut(const Target, DestinationFile, Description, Parameters: string);
+procedure CreateShortcut(const Target, FilePath, Description, Parameters: string);
+procedure ReadShortcut(const FilePath: string; var Target, Description, Parameters: string);
 function GetFileTypeDescription(filetype: string): string;
 
 const
@@ -495,7 +497,9 @@ begin
 
   // Provide address
   SetLength(Result, dwSize-1); // exclude null-terminated
-  if not GetComputerNameEx(nameType, PWideChar(Result), dwSize) then
+  if not {$IF CompilerVersion <= 35.0}longbool({$IFEND}
+    GetComputerNameEx(nameType, PWideChar(Result), dwSize)
+    {$IF CompilerVersion <= 35.0}){$IFEND} then
     RaiseLastOSError;
 end;
 
@@ -515,7 +519,9 @@ begin
 
   // Provide address
   SetLength(Result, dwSize-1); // exclude null-terminated
-  if not GetUserNameEx(nameType, PWideChar(Result), dwSize) then
+  if not {$IF CompilerVersion <= 35.0}longbool({$IFEND}
+    GetUserNameEx(nameType, PWideChar(Result), dwSize)
+    {$IF CompilerVersion <= 35.0}){$IFEND} then
     RaiseLastOSError;
 end;
 
@@ -535,7 +541,9 @@ begin
 
   // Provide address
   SetLength(Result, dwSize-1); // exclude null-terminated
-  if not GetUserNameEx(nameType, PWideChar(Result), dwSize) then
+  if not {$IF CompilerVersion <= 35.0}longbool({$IFEND}
+    GetUserNameEx(nameType, PWideChar(Result), dwSize)
+    {$IF CompilerVersion <= 35.0}){$IFEND} then
     RaiseLastOSError;
 end;
 
@@ -1110,7 +1118,7 @@ begin
   ShellExecute(0, 'open', 'powershell', '-c "(New-Object -Com Shell.Application).ShutdownWindows()"', nil, 0);
 end;
 
-procedure CreateShortcut(const Target, DestinationFile, Description, Parameters: string);
+procedure CreateShortcut(const Target, FilePath, Description, Parameters: string);
 var
   IObject: IUnknown;
   SLink: IShellLink;
@@ -1121,12 +1129,48 @@ begin
   PFile:=IObject as IPersistFile;
   with SLink do
   begin
-    SetArguments(PChar(Parameters));
-    SetDescription(PChar(Description));
     SetPath(PChar(Target));
+    SetDescription(PChar(Description));
+    SetArguments(PChar(Parameters));
+
     SetWorkingDirectory(PChar(ExtractFileDir(Target)));
   end;
-  PFile.Save(PWChar(WideString(DestinationFile)), FALSE);
+  PFile.Save(PWChar(WideString(FilePath)), FALSE);
+end;
+
+procedure ReadShortcut(const FilePath: string; var Target, Description, Parameters: string);
+var
+  IObject: IUnknown;
+  SLink: IShellLink;
+  PFile: IPersistFile;
+
+  S: WideString;
+  T: string;
+begin
+  IObject:=CreateComObject(CLSID_ShellLink);
+  SLink:=IObject as IShellLink;
+  PFile:=IObject as IPersistFile;
+  PFile.Load(PWChar(WideString(FilePath)), STGM_READ);
+
+  with SLink do begin
+    SetLength(S, MAX_PATH);
+    
+    var X: TWin32FindDataW;
+    SLink.GetPath(@S[1], MAX_PATH, X, 0);
+    T := Trim(S);
+    T := T.Substring(0, T.IndexOf(#0));
+    Target := T;
+    
+    SLink.GetDescription(@S[1], MAX_PATH);
+    T := Trim(S);
+    T := T.Substring(0, T.IndexOf(#0));
+    Description := T;
+    
+    SLink.GetArguments(@S[1], MAX_PATH);
+    T := Trim(S);
+    T := T.Substring(0, T.IndexOf(#0));
+    Parameters := T;
+  end;
 end;
 
 { TProcessListHelper }

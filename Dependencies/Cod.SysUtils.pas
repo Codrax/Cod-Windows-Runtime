@@ -18,7 +18,7 @@ unit Cod.SysUtils;
 interface
   uses
   {$IFDEF MSWINDOWS}
-  Registry, ShellApi, ActiveX, ComObj, Winapi.shlobj,
+  Win.Registry, Winapi.ShellApi, Winapi.ActiveX, Win.ComObj, Winapi.shlobj,
   Cod.Registry, Cod.ColorUtils, Vcl.Imaging.pngimage,
   Vcl.Graphics, Winapi.Windows, Vcl.Controls, Vcl.Themes, Vcl.Forms,
   Winapi.Messages,
@@ -891,7 +891,7 @@ begin
 
   {$IFDEF MSWINDOWS}
   // Fix WinNT
-  if (Result[1] = '/') then
+  if (Length(Result)>0) and (Result[1] = '/') then
     Result[1] := '-';
   {$ENDIF}
 end;

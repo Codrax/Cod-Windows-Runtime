@@ -19,7 +19,7 @@ interface
   uses
   System.SysUtils, System.Classes, IdHTTP,
   {$IFDEF MSWINDOWS}
-  Windows,
+  Winapi.Windows,
   {$ENDIF}
   VCL.Graphics, Winapi.ActiveX, Winapi.URLMon, IOUtils, System.Generics.Collections,
   Cod.ColorUtils, System.Generics.Defaults, Vcl.Imaging.pngimage,
