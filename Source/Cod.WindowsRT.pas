@@ -19,8 +19,8 @@ interface
   // System
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes, 
   System.Types, Math, Vcl.Forms, IOUtils, System.Generics.Collections, 
-  ActiveX, ComObj, Cod.ArrayHelpers, TypInfo, DateUtils, ShlObj, Rtti,
-  Vcl.Graphics,
+  Winapi.ActiveX, Win.ComObj, Cod.ArrayHelpers, TypInfo, DateUtils,
+  Winapi.ShlObj, Rtti, Vcl.Graphics,
 
   // Windows RT (Runtime)
   Win.WinRT,

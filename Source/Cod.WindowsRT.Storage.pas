@@ -18,8 +18,8 @@ interface
 uses
   // System
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  Vcl.Forms, IOUtils, System.Generics.Collections, Dialogs, ActiveX, ComObj,
-  DateUtils, Math,
+  Vcl.Forms, IOUtils, System.Generics.Collections, Dialogs, Winapi.ActiveX,
+  Win.ComObj, DateUtils, Math,
 
   // Graphics
   Vcl.Graphics,

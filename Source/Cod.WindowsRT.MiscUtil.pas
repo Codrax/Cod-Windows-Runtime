@@ -5,7 +5,8 @@ interface
 uses
   // System
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  Vcl.Forms, IOUtils, System.Generics.Collections, Dialogs, ActiveX, ComObj,
+  Vcl.Forms, IOUtils, System.Generics.Collections, Dialogs, Winapi.ActiveX,
+  Win.ComObj,
   DateUtils,
 
   // Graphics
