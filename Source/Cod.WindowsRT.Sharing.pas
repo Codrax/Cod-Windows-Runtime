@@ -374,9 +374,9 @@ begin
 end;
 
 procedure TDataRequest.SetFiles(const Value: TArray<string>);
-var
-  Items: IIterable_1__IStorageItem;
-  Enum: TEnumerator<IStorageItem>;
+//var
+  //Items: IIterable_1__IStorageItem;
+  //Enum: TEnumerator<IStorageItem>;
 begin
   raise Exception.Create('Not implemented.');
   {

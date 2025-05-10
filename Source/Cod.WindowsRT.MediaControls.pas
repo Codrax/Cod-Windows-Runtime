@@ -576,8 +576,11 @@ type
 
     FInterop: ISystemMediaTransportControlsInterop;
 
+    FCreatedHWND: boolean;
     FWindowHWND: HWND;
     FWindowClassName: PChar;
+
+    procedure DoCreateForWindow;
 
   protected
     function GetTransportControls: ISystemMediaTransportControls; override;
@@ -590,6 +593,7 @@ type
 
     // Constructors
     constructor Create; overload;
+    constructor CreateForWindow(Handle: HWND); overload;
     constructor Create(WindowClassName: string); overload;
     destructor Destroy; override;
   end;
@@ -1163,8 +1167,6 @@ begin
 end;
 
 function TSystemMediaControlsMediaInformation.GetThumbnail: TGraphic;
-var
-  RandomAccessStreamWithContentType: IRandomAccessStreamWithContentType;
 begin
   if not HasThumbnail then
     Exit(nil);
@@ -1517,11 +1519,6 @@ end;
 
 { TWindowMediaTransportControls }
 
-function WindowProc(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): LRESULT; stdcall;
-begin
-  Result := DefWindowProc(hWnd, Msg, wParam, lParam);
-end;
-
 constructor TWindowMediaTransportControls.Create(WindowClassName: string);
 var
   wnd: WNDCLASS;
@@ -1537,7 +1534,7 @@ begin
   FWindowClassName := PChar(WindowClassName);
 
   wnd.style := 0;
-  wnd.lpfnWndProc := @WindowProc; // Provide a valid window procedure
+  wnd.lpfnWndProc := @DefWindowProc; // Provide a valid window procedure
   wnd.cbClsExtra := 0;
   wnd.cbWndExtra := 0;
   wnd.hInstance := HInstance;     // Use the correct instance handle
@@ -1549,11 +1546,44 @@ begin
 
   if winapi.Windows.RegisterClass(wnd) = 0 then
     RaiseLastOSError;
-
-  FWindowHWND := CreateWindowExW(0, FWindowClassName, FWindowClassName, 0,
+                                                      // no name needed
+  FWindowHWND := CreateWindowExW(0, FWindowClassName, nil, 0,
     CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, 0,
     0, HInstance, nil);
 
+  FCreatedHWND := true; // self created window, set true to free later
+
+  // Create
+  DoCreateForWindow;
+end;
+
+constructor TWindowMediaTransportControls.CreateForWindow(Handle: HWND);
+begin
+  FWindowHWND := Handle;
+
+  // Create
+  DoCreateForWindow;
+end;
+
+constructor TWindowMediaTransportControls.Create;
+begin
+  Create( AppRegistration.AppUserModelID+'media-window-class' );
+end;
+
+destructor TWindowMediaTransportControls.Destroy;
+begin
+  if FCreatedHWND and not DestroyWindow(FWindowHWND) then
+    RaiseLastOSError;
+
+  inherited;
+
+  FInterface := nil;
+  FInterface2 := nil;
+  FUpdater := nil;
+end;
+
+procedure TWindowMediaTransportControls.DoCreateForWindow;
+begin
   // Interface
   FInterop := TSystemMediaTransportControlsInterop.Factory;
   if Failed(
@@ -1572,23 +1602,6 @@ begin
 
   // Get info updater
   FUpdater := FInterface.DisplayUpdater;
-end;
-
-constructor TWindowMediaTransportControls.Create;
-begin
-  Create( AppRegistration.AppUserModelID+'media-window-class' );
-end;
-
-destructor TWindowMediaTransportControls.Destroy;
-begin
-  if not DestroyWindow(FWindowHWND) then
-    RaiseLastOSError;
-
-  inherited;
-
-  FInterface := nil;
-  FInterface2 := nil;
-  FUpdater := nil;
 end;
 
 function TWindowMediaTransportControls.GetTransportControls: ISystemMediaTransportControls;

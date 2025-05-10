@@ -18,9 +18,7 @@ interface
 
 uses
   // System
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes,
-  Vcl.Forms, IOUtils, System.Generics.Collections, Dialogs, ActiveX, ComObj,
-  DateUtils,
+  Winapi.Windows, System.SysUtils, System.Classes,
 
   // Windows RT (Runtime)
   Win.WinRT,
@@ -43,6 +41,9 @@ uses
   // Cod Utils
   Cod.WindowsRT,
   Cod.Registry;
+
+const
+  ssNotificationUnknownCardinalValue = 'Unknown cardinal value.';
 
 type
   // Predefine
@@ -78,6 +79,10 @@ type
     NotificationLoopingCall9,
     NotificationLoopingCall10
   );
+  TSoundEventValueHelper = record helper for TSoundEventValue
+    function ToString: string; inline;
+  end;
+
   TImagePlacement = (Default, Hero, LogoOverride);
   TImageCrop = (Default, None, Circle);
   TInputType = (Text, Selection);
@@ -89,8 +94,14 @@ type
     ///  <summary> Run the activation in the background via a task </summary>
     Background,
     ///  <summary> Start another application via protocol. Eg: "ms-calculator://" </summary>
-    Protocol
+    Protocol,
+    ///  <summary> System handle </summary>
+    System
   );
+  TActivationTypeHelper = record helper for TActivationType
+    function ToString: string; inline;
+  end;
+
   TToastDuration = (
     ///  <summary> Use default: short </summary>
     Default,
@@ -99,6 +110,10 @@ type
     ///  <summary> Display for 25s </summary>
     Long
   );
+  TToastDurationHelper = record helper for TToastDuration
+    function ToString: string; inline;
+  end;
+
   TAudioMode = (
     ///  <summary> The notification controls the audio </summary>
     Default,
@@ -107,7 +122,12 @@ type
     ///  <summary> Custom audio overrides all toast sounds </summary>
     Custom
   );
-  TNotificationRank = (Default, Normal, High, Topmost);
+  TNotificationRank = (
+    Default,
+    Normal,
+    High,
+    Topmost
+  );
   TToastScenario = (
     ///  <summary> Default notification behaviour </summary>
     Default,
@@ -120,7 +140,21 @@ type
     ///  <summary> Urgent </summary>
     Urgent
     );
+  TToastScenarioHelper = record helper for TToastScenario
+    function ToString: string; inline;
+  end;
   TToastDismissReason = ToastDismissalReason;
+
+  // Exceptions
+  EWinRTNotification = class(Exception);
+  EWinRTNotificationNotActive = class(Exception);
+  EWinRTNotificationNoTag = class(Exception);
+  EWinRTNotificationCreationFailed = class(Exception);
+  EWinRTNotificationNotVisible = class(EWinRTNotification);
+  EWinRTNotificationAlreadyPosted = class(EWinRTNotification);
+  EWinRTNotificationFeatureNotSupported = class(EWinRTNotification);
+  EWinRTNotificationUpdateFailed = class(EWinRTNotification);
+  ENotificationUnknownCardinal = class(EWinRTNotification);
 
   // Events
   TOnToastActivated = procedure(Sender: TNotification; Arguments: string; UserInput: TUserInputMap) of Object;
@@ -368,40 +402,48 @@ type
 
     procedure HandleValues(AValues: TArray<TToastValue>);
   public
-    function GetXML: TDomXMLDocument; virtual;
+    function GenerateXML: TDomXMLDocument; virtual;
+
+    (* Using the generates XML, create a notification *)
+    function GenerateNotification: TNotification;
+    (* Free this object and set the notificaiton *)
+    procedure BuildNotificationAndFree(var NotifObject: TNotification);
 
     // Adders
-    procedure AddText(AText: TToastValue);
+    function AddText(AText: TToastValue): TToastContentBuilder;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-audio *)
-    procedure AddAudio(URI: string; Loop: TWinBoolean = TWinBoolean.WinDefault; Silent: TWinBoolean=TWinBoolean.WinDefault); overload;
-    procedure AddAudio(CustomSound: TSoundEventValue; Loop: TWinBoolean=TWinBoolean.WinDefault; Silent: TWinBoolean=TWinBoolean.WinDefault); overload;
+    function AddAudio(URI: string; Loop: TWinBoolean = TWinBoolean.WinDefault; Silent: TWinBoolean=TWinBoolean.WinDefault): TToastContentBuilder; overload;
+    function AddAudio(CustomSound: TSoundEventValue; Loop: TWinBoolean=TWinBoolean.WinDefault; Silent: TWinBoolean=TWinBoolean.WinDefault): TToastContentBuilder; overload;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-image *)
-    procedure AddHeroImage(URI: TToastValue; AltText: string='');
-    procedure AddAppLogoOverride(URI: TToastValue; AdaptiveCrop: TImageCrop; AltText: string='');
-    procedure AddInlineImage(URI: TToastValue; AltText: string='';
-      AdaptiveCrop: TImageCrop=TImageCrop.Default; RemoveMargin: boolean=false);
+    function AddHeroImage(URI: TToastValue; AltText: string=''): TToastContentBuilder;
+    function AddAppLogoOverride(URI: TToastValue; AdaptiveCrop: TImageCrop; AltText: string=''): TToastContentBuilder;
+    function AddInlineImage(URI: TToastValue; AltText: string='';
+      AdaptiveCrop: TImageCrop=TImageCrop.Default; RemoveMargin: boolean=false): TToastContentBuilder;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-progress *)
-    procedure AddProgressBar(Title: TToastValue; Value: TToastValue); overload;
-    procedure AddProgressBar(Title: TToastValue; Value: TToastValue; Indeterminate: TWinBoolean); overload;
-    procedure AddProgressBar(Title: TToastValue; Value: TToastValue;
-      Indeterminate: TWinBoolean; ValueStringOverride: TToastValue;  Status: TToastValue); overload;
+    function AddProgressBar(Title: TToastValue; Value: TToastValue): TToastContentBuilder; overload;
+    function AddProgressBar(Title: TToastValue; Value: TToastValue; Indeterminate: TWinBoolean): TToastContentBuilder; overload;
+    function AddProgressBar(Title: TToastValue; Value: TToastValue;
+      Indeterminate: TWinBoolean; ValueStringOverride: TToastValue;  Status: TToastValue): TToastContentBuilder; overload;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-input *)
-    procedure AddInputTextBox(ID: string; Placeholder: string=''; Title: string='');
-    procedure AddComboBox(ID: string; Title: string; SelectedItemID: string; Items: TArray<TToastComboItem>);
+    function AddInputTextBox(ID: string; Placeholder: string=''; Title: string=''): TToastContentBuilder;
+    function AddComboBox(ID: string; Title: string; SelectedItemID: string; Items: TArray<TToastComboItem>): TToastContentBuilder;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-action *)
-    procedure AddButton(Content: string; ActivationType: TActivationType; Arguments: string); overload;
-    procedure AddButton(Content: string; ActivationType: TActivationType; Arguments, ImageURI: string); overload;
+    function AddButton(Content: string; ActivationType: TActivationType; Arguments: string): TToastContentBuilder; overload;
+    function AddButton(Content: string; ActivationType: TActivationType; Arguments, ImageURI: string): TToastContentBuilder; overload;
     (* https://learn.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-header *)
-    procedure AddHeader(ID, Title, Arguments: string);
+    function AddHeader(ID, Title, Arguments: string): TToastContentBuilder;
 
     (* https://learn.microsoft.com/en-us/dotnet/api/microsoft.toolkit.uwp.notifications.toastcontentbuilder.settoastduration *)
-    procedure SetDuration(Duration: TToastDuration);
+    function SetDuration(Duration: TToastDuration): TToastContentBuilder;
 
     (* https://learn.microsoft.com/en-us/dotnet/api/microsoft.toolkit.uwp.notifications.toastcontent.scenario *)
-    procedure SetScenario(Scenario: TToastScenario);
+    function SetScenario(Scenario: TToastScenario): TToastContentBuilder;
 
-    procedure SetBackgroundActivation;
-    procedure SetProtocolActivation(URI: string);
+    (* https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/toast-schema#toastactivationtype *)
+    function SetActivationType(const Value: TActivationType): TToastContentBuilder;
+
+    (* The launch URI launched when the notification is clicked, TActivationType. Protocol is required! *)
+    function SetLaunchURI(URI: string): TToastContentBuilder;
 
     // Constructors
     constructor Create;
@@ -410,13 +452,8 @@ type
 
   TNotificationManager = class(TObject)
   private
-    const
-      VALUE_NAME = 'DisplayName';
-      VALUE_ICON = 'IconUri';
-
-    var
     FNotifier: IToastNotifier;
-    FNotifier2: IToastNotifier2;
+    FNotifier2: IToastNotifier2; // optional, required for updating
 
     FRegSettingsPath: string;
 
@@ -491,45 +528,7 @@ const
   IID_IToastNotification6: TGUID = '{43EBFE53-89AE-5C1E-A279-3AECFE9B6F54}';
   IID_IScheduledToastNotifier: TGUID = '{79F577F8-0DE7-48CD-9740-9B370490C838}';
 
-// Utils
-function AudioTypeToString(AType: TSoundEventValue): string;
-
 implementation
-
-{ TNotificationAudio }
-
-function AudioTypeToString(AType: TSoundEventValue): string;
-begin
-  case AType of
-    TSoundEventValue.NotificationDefault: Result := 'ms-winsoundevent:Notification.Default';
-    TSoundEventValue.NotificationIM: Result := 'ms-winsoundevent:Notification.IM';
-    TSoundEventValue.NotificationMail: Result := 'ms-winsoundevent:Notification.Mail';
-    TSoundEventValue.NotificationReminder: Result := 'ms-winsoundevent:Notification.Reminder';
-    TSoundEventValue.NotificationSMS: Result := 'ms-winsoundevent:Notification.SMS';
-    TSoundEventValue.NotificationLoopingAlarm: Result := 'ms-winsoundevent:Notification.Looping.Alarm';
-    TSoundEventValue.NotificationLoopingAlarm2: Result := 'ms-winsoundevent:Notification.Looping.Alarm2';
-    TSoundEventValue.NotificationLoopingAlarm3: Result := 'ms-winsoundevent:Notification.Looping.Alarm3';
-    TSoundEventValue.NotificationLoopingAlarm4: Result := 'ms-winsoundevent:Notification.Looping.Alarm4';
-    TSoundEventValue.NotificationLoopingAlarm5: Result := 'ms-winsoundevent:Notification.Looping.Alarm5';
-    TSoundEventValue.NotificationLoopingAlarm6: Result := 'ms-winsoundevent:Notification.Looping.Alarm6';
-    TSoundEventValue.NotificationLoopingAlarm7: Result := 'ms-winsoundevent:Notification.Looping.Alarm7';
-    TSoundEventValue.NotificationLoopingAlarm8: Result := 'ms-winsoundevent:Notification.Looping.Alarm8';
-    TSoundEventValue.NotificationLoopingAlarm9: Result := 'ms-winsoundevent:Notification.Looping.Alarm9';
-    TSoundEventValue.NotificationLoopingAlarm10: Result := 'ms-winsoundevent:Notification.Looping.Alarm10';
-    TSoundEventValue.NotificationLoopingCall: Result := 'ms-winsoundevent:Notification.Looping.Call';
-    TSoundEventValue.NotificationLoopingCall2: Result := 'ms-winsoundevent:Notification.Looping.Call2';
-    TSoundEventValue.NotificationLoopingCall3: Result := 'ms-winsoundevent:Notification.Looping.Call3';
-    TSoundEventValue.NotificationLoopingCall4: Result := 'ms-winsoundevent:Notification.Looping.Call4';
-    TSoundEventValue.NotificationLoopingCall5: Result := 'ms-winsoundevent:Notification.Looping.Call5';
-    TSoundEventValue.NotificationLoopingCall6: Result := 'ms-winsoundevent:Notification.Looping.Call6';
-    TSoundEventValue.NotificationLoopingCall7: Result := 'ms-winsoundevent:Notification.Looping.Call7';
-    TSoundEventValue.NotificationLoopingCall8: Result := 'ms-winsoundevent:Notification.Looping.Call8';
-    TSoundEventValue.NotificationLoopingCall9: Result := 'ms-winsoundevent:Notification.Looping.Call9';
-    TSoundEventValue.NotificationLoopingCall10: Result := 'ms-winsoundevent:Notification.Looping.Call10';
-
-    else Result := '';
-  end;
-end;
 
 { TNotificationManager }
 
@@ -660,7 +659,7 @@ end;
 procedure TNotificationManager.HideNotification(Notification: TNotification);
 begin
   if not Notification.Posted then
-    raise Exception.Create('Notification is not visible.');
+    raise EWinRTNotificationNotVisible.Create('Notification is not visible.');
 
   FNotifier.Hide(Notification.FToast);
 
@@ -677,8 +676,15 @@ begin
                         
   // Create IToastInterface
   AName := HString.Create( AppRegistration.AppUserModelID );
-  FNotifier := TToastNotificationManager.CreateToastNotifier(AName);
-  AName.Free;
+  try
+    try
+      FNotifier := TToastNotificationManager.CreateToastNotifier(AName);
+    except
+      raise EWinRTNotificationCreationFailed.Create('Failed to create notification toast.');
+    end;
+  finally
+    AName.Free;
+  end;
           
   // Query IToastInterace2
   if Supports(FNotifier, IToastNotifier2, FNotifier2) then
@@ -751,7 +757,7 @@ end;
 procedure TNotificationManager.ShowNotification(Notification: TNotification);
 begin
   if Notification.Posted then
-    raise Exception.Create('Notification has already been posted.');
+    raise EWinRTNotificationAlreadyPosted.Create('Notification has already been posted.');
 
   // Register
   if not HasRegistryRecord then
@@ -770,10 +776,13 @@ var
   HS_Tag, HS_Group: HSTRING;
 begin
   if not Notification.Posted then
-    raise Exception.Create('Notification is not active.');
+    raise EWinRTNotificationNotActive.Create('Notification is not active.');
 
   if Notification.Tag = '' then
-    raise Exception.Create('Tag is required to update notification.');
+    raise EWinRTNotificationNoTag.Create('Tag is required to update notification.');
+
+  if FNotifier2 = nil then
+    raise EWinRTNotificationFeatureNotSupported.Create('This device does not support updating notifications.');
 
   // Get data
   Data := Notification.Data;
@@ -790,7 +799,7 @@ begin
       Result := FNotifier2.Update(Data.Data, HS_Tag, HS_Group);
       
     if Result <> NotificationUpdateResult.Succeeded then
-      raise Exception.CreateFmt('Update procedure or IToastNotifier2 failed, with a result of: %D', [integer(Result)]);
+      raise EWinRTNotificationUpdateFailed.CreateFmt('Update procedure for notification failed, with a result of: %D', [integer(Result)]);
   finally
     FreeHString(HS_Tag);
     FreeHString(HS_Group);
@@ -884,7 +893,7 @@ end;
 
 { TToastContentBuilder }
 
-procedure TToastContentBuilder.AddAudio(URI: string; Loop, Silent: TWinBoolean);
+function TToastContentBuilder.AddAudio(URI: string; Loop, Silent: TWinBoolean): TToastContentBuilder;
 begin
   with FXML.Nodes.AddNode('audio') do begin
     Attributes['src'] := URI;
@@ -894,10 +903,13 @@ begin
     if Silent <> TWinBoolean.WinDefault then
       Attributes['silent'] := Silent.ToString;
   end;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddAppLogoOverride(URI: TToastValue;
-  AdaptiveCrop: TImageCrop; AltText: string);
+function TToastContentBuilder.AddAppLogoOverride(URI: TToastValue;
+  AdaptiveCrop: TImageCrop; AltText: string): TToastContentBuilder;
 begin
   with FXMLBinding.Nodes.AddNode('image') do begin
     Attributes['src'] := URI.ToXML;
@@ -912,16 +924,22 @@ begin
   end;
 
   HandleValues([URI]);
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddAudio(CustomSound: TSoundEventValue; Loop,
-  Silent: TWinBoolean);
+function TToastContentBuilder.AddAudio(CustomSound: TSoundEventValue; Loop,
+  Silent: TWinBoolean): TToastContentBuilder;
 begin
-  AddAudio(AudioTypeToString(CustomSound), Loop, Silent);
+  AddAudio(CustomSound.ToString, Loop, Silent);
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddButton(Content: string;
-  ActivationType: TActivationType; Arguments, ImageURI: string);
+function TToastContentBuilder.AddButton(Content: string;
+  ActivationType: TActivationType; Arguments, ImageURI: string): TToastContentBuilder;
 begin
   EnsureActions;
   
@@ -929,22 +947,20 @@ begin
     Attributes['content'] := Content;
     Attributes['arguments'] := Arguments;
 
-    var S: string; S := '';
-    case ActivationType of
-      TActivationType.Foreground: S := 'foreground';
-      TActivationType.Background: S := 'background';
-      TActivationType.Protocol: S := 'protocol';
-    end;
-    if S <> '' then
-      Attributes['activationType'] := S;
+    const sActType = ActivationType.ToString;
+    if sActType <> '' then
+      Attributes['activationType'] := sActType;
 
     if ImageURI <> '' then
       Attributes['imageUri'] := ImageURI;
   end;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddComboBox(ID: string; Title: string;
-  SelectedItemID: string; Items: TArray<TToastComboItem>);
+function TToastContentBuilder.AddComboBox(ID: string; Title: string;
+  SelectedItemID: string; Items: TArray<TToastComboItem>): TToastContentBuilder;
 begin
   EnsureActions;
   
@@ -960,24 +976,33 @@ begin
         Attributes['content'] := Items[I].Content;
       end;
   end;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddButton(Content: string;
-  ActivationType: TActivationType; Arguments: string);
+function TToastContentBuilder.AddButton(Content: string;
+  ActivationType: TActivationType; Arguments: string): TToastContentBuilder;
 begin
   AddButton(Content, ActivationType, Arguments, '');
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddHeader(ID, Title, Arguments: string);
+function TToastContentBuilder.AddHeader(ID, Title, Arguments: string): TToastContentBuilder;
 begin
   with FXML.Nodes.AddNode('header') do begin
     Attributes['id'] := ID;
     Attributes['title'] := Title;
     Attributes['arguments'] := Arguments;
   end;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddHeroImage(URI: TToastValue; AltText: string);
+function TToastContentBuilder.AddHeroImage(URI: TToastValue; AltText: string): TToastContentBuilder;
 begin
   with FXMLBinding.Nodes.AddNode('image') do begin
     Attributes['src'] := URI.ToXML;
@@ -987,10 +1012,13 @@ begin
   end;
 
   HandleValues([URI]);
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddInlineImage(URI: TToastValue; AltText: string;
-  AdaptiveCrop: TImageCrop; RemoveMargin: boolean);
+function TToastContentBuilder.AddInlineImage(URI: TToastValue; AltText: string;
+  AdaptiveCrop: TImageCrop; RemoveMargin: boolean): TToastContentBuilder;
 begin
   with FXMLBinding.Nodes.AddNode('image') do begin
     Attributes['src'] := URI.ToXML;
@@ -1004,9 +1032,12 @@ begin
   end;
 
   HandleValues([URI]);
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddInputTextBox(ID, Placeholder, Title: string);
+function TToastContentBuilder.AddInputTextBox(ID, Placeholder, Title: string): TToastContentBuilder;
 begin
   EnsureActions;
 
@@ -1016,17 +1047,22 @@ begin
     Attributes['title'] := Title;
     Attributes['placeHolderContent'] := Placeholder;
   end;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddProgressBar(Title, Value: TToastValue;
-  Indeterminate: TWinBoolean);
+function TToastContentBuilder.AddProgressBar(Title, Value: TToastValue;
+  Indeterminate: TWinBoolean): TToastContentBuilder;
 begin
   AddProgressBar(Title, Value, Indeterminate, TToastValueString.Create(''),
     TToastValueString.Create(''));
+
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddProgressBar(Title, Value: TToastValue;
-  Indeterminate: TWinBoolean; ValueStringOverride, Status: TToastValue);
+function TToastContentBuilder.AddProgressBar(Title, Value: TToastValue;
+  Indeterminate: TWinBoolean; ValueStringOverride, Status: TToastValue): TToastContentBuilder;
 begin
   with FXMLBinding.Nodes.AddNode('progress') do begin
     case Indeterminate of
@@ -1042,19 +1078,28 @@ begin
   end;
 
   HandleValues([Title, Value, ValueStringOverride, Status]);
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddProgressBar(Title, Value: TToastValue);
+function TToastContentBuilder.AddProgressBar(Title, Value: TToastValue): TToastContentBuilder;
 begin
   AddProgressBar(Title, Value, WinFalse, TToastValueString.Create(''),
     TToastValueString.Create(''));
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.AddText(AText: TToastValue);
+function TToastContentBuilder.AddText(AText: TToastValue): TToastContentBuilder;
 begin
   FXMLBinding.Nodes.AddNode('text').Contents := AText.ToXML;
 
   HandleValues([AText]);
+
+  //
+  Result := Self;
 end;
 
 constructor TToastContentBuilder.Create;
@@ -1079,7 +1124,20 @@ begin
     FXMLActions:= FXML.Nodes.AddNode('actions');
 end;
 
-function TToastContentBuilder.GetXML: TDomXMLDocument;
+function TToastContentBuilder.GenerateNotification: TNotification;
+begin
+  Result := TNotification.Create( GenerateXML );
+end;
+
+procedure TToastContentBuilder.BuildNotificationAndFree(var NotifObject: TNotification);
+begin
+  NotifObject := GenerateNotification;
+
+  // Free object
+  Self.Free;
+end;
+
+function TToastContentBuilder.GenerateXML: TDomXMLDocument;
 begin
   Result := TDomXMLDocument.Create;
   const XML = FXML.OuterXML;
@@ -1095,39 +1153,49 @@ begin
   end;
 end;
 
-procedure TToastContentBuilder.SetBackgroundActivation;
+function TToastContentBuilder.SetActivationType(
+  const Value: TActivationType): TToastContentBuilder;
 begin
-  FXML.Attributes['activationType'] := 'background';
+  if Value = TActivationType.Default then
+    FXML.Attributes.DeleteAttribute('activationType')
+  else
+    FXML.Attributes['activationType'] := Value.ToString;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.SetProtocolActivation(URI: string);
+function TToastContentBuilder.SetLaunchURI(URI: string): TToastContentBuilder;
 begin
-  FXML.Attributes['activationType'] := 'protocol';
   FXML.Attributes['launch'] := URI;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.SetDuration(Duration: TToastDuration);
+function TToastContentBuilder.SetDuration(Duration: TToastDuration): TToastContentBuilder;
 const
   ATTR = 'duration';
 begin
-  case Duration of
-    TToastDuration.Default: FXML.Attributes.DeleteAttribute(ATTR);
-    TToastDuration.Short: FXML.Attributes[ATTR] := 'Short';
-    TToastDuration.Long: FXML.Attributes[ATTR] := 'Long';
-  end;
+  if Duration = TToastDuration.Default then
+    FXML.Attributes.DeleteAttribute(ATTR)
+  else
+    FXML.Attributes[ATTR] := Duration.ToString;
+
+  //
+  Result := Self;
 end;
 
-procedure TToastContentBuilder.SetScenario(Scenario: TToastScenario);
+function TToastContentBuilder.SetScenario(Scenario: TToastScenario): TToastContentBuilder;
 const
   ATTR = 'scenario';
 begin
-  case Scenario of
-    TToastScenario.Default: FXML.Attributes.DeleteAttribute(ATTR);
-    TToastScenario.Alarm: FXML.Attributes[ATTR] := 'Alarm';
-    TToastScenario.Reminder: FXML.Attributes[ATTR] := 'Reminder';
-    TToastScenario.IncomingCall: FXML.Attributes[ATTR] := 'IncomingCall';
-    TToastScenario.Urgent: FXML.Attributes[ATTR] := 'Urgent';
-  end;
+  if Scenario = TToastScenario.Default then
+    FXML.Attributes.DeleteAttribute(ATTR)
+  else
+    FXML.Attributes[ATTR] := Scenario.ToString;
+
+  Result := Self;
 end;
 
 { TNotification }
@@ -1574,6 +1642,85 @@ begin
     Result := FMap.HasKey( HStr );
   finally
     HStr.Free;
+  end;
+end;
+
+{ TSoundEventValueHelper }
+
+function TSoundEventValueHelper.ToString: string;
+begin
+  case Self of
+    TSoundEventValue.Default: Exit( '');
+    TSoundEventValue.NotificationDefault: Exit( 'ms-winsoundevent:Notification.Default');
+    TSoundEventValue.NotificationIM: Exit('ms-winsoundevent:Notification.IM');
+    TSoundEventValue.NotificationMail: Exit('ms-winsoundevent:Notification.Mail');
+    TSoundEventValue.NotificationReminder: Exit('ms-winsoundevent:Notification.Reminder');
+    TSoundEventValue.NotificationSMS: Exit('ms-winsoundevent:Notification.SMS');
+    TSoundEventValue.NotificationLoopingAlarm: Exit('ms-winsoundevent:Notification.Looping.Alarm');
+    TSoundEventValue.NotificationLoopingAlarm2: Exit('ms-winsoundevent:Notification.Looping.Alarm2');
+    TSoundEventValue.NotificationLoopingAlarm3: Exit('ms-winsoundevent:Notification.Looping.Alarm3');
+    TSoundEventValue.NotificationLoopingAlarm4: Exit('ms-winsoundevent:Notification.Looping.Alarm4');
+    TSoundEventValue.NotificationLoopingAlarm5: Exit('ms-winsoundevent:Notification.Looping.Alarm5');
+    TSoundEventValue.NotificationLoopingAlarm6: Exit('ms-winsoundevent:Notification.Looping.Alarm6');
+    TSoundEventValue.NotificationLoopingAlarm7: Exit('ms-winsoundevent:Notification.Looping.Alarm7');
+    TSoundEventValue.NotificationLoopingAlarm8: Exit('ms-winsoundevent:Notification.Looping.Alarm8');
+    TSoundEventValue.NotificationLoopingAlarm9: Exit('ms-winsoundevent:Notification.Looping.Alarm9');
+    TSoundEventValue.NotificationLoopingAlarm10: Exit('ms-winsoundevent:Notification.Looping.Alarm10');
+    TSoundEventValue.NotificationLoopingCall: Exit('ms-winsoundevent:Notification.Looping.Call');
+    TSoundEventValue.NotificationLoopingCall2: Exit('ms-winsoundevent:Notification.Looping.Call2');
+    TSoundEventValue.NotificationLoopingCall3: Exit('ms-winsoundevent:Notification.Looping.Call3');
+    TSoundEventValue.NotificationLoopingCall4: Exit('ms-winsoundevent:Notification.Looping.Call4');
+    TSoundEventValue.NotificationLoopingCall5: Exit('ms-winsoundevent:Notification.Looping.Call5');
+    TSoundEventValue.NotificationLoopingCall6: Exit('ms-winsoundevent:Notification.Looping.Call6');
+    TSoundEventValue.NotificationLoopingCall7: Exit('ms-winsoundevent:Notification.Looping.Call7');
+    TSoundEventValue.NotificationLoopingCall8: Exit('ms-winsoundevent:Notification.Looping.Call8');
+    TSoundEventValue.NotificationLoopingCall9: Exit('ms-winsoundevent:Notification.Looping.Call9');
+    TSoundEventValue.NotificationLoopingCall10: Exit('ms-winsoundevent:Notification.Looping.Call10');
+
+    else raise ENotificationUnknownCardinal.Create(ssNotificationUnknownCardinalValue);
+  end;
+end;
+
+{ TActivationTypeHelper }
+
+function TActivationTypeHelper.ToString: string;
+begin
+  case Self of
+    TActivationType.Default: Exit('');
+    TActivationType.Foreground: Exit('foreground');
+    TActivationType.Background: Exit('background');
+    TActivationType.Protocol: Exit('protocol');
+    TActivationType.System: Exit('system');
+
+    else raise ENotificationUnknownCardinal.Create(ssNotificationUnknownCardinalValue);
+  end;
+end;
+
+{ TToastDurationHelper }
+
+function TToastDurationHelper.ToString: string;
+begin
+  case Self of
+    TToastDuration.Default: Exit('');
+    TToastDuration.Short: Exit('short');
+    TToastDuration.Long: Exit('long');
+
+    else raise ENotificationUnknownCardinal.Create(ssNotificationUnknownCardinalValue);
+  end;
+end;
+
+{ TToastScenarioHelper }
+
+function TToastScenarioHelper.ToString: string;
+begin
+  case Self of
+    TToastScenario.Default: Exit('');
+    TToastScenario.Alarm: Exit('alarm');
+    TToastScenario.Reminder: Exit('reminder');
+    TToastScenario.IncomingCall: Exit('incomingCall');
+    TToastScenario.Urgent: Exit('urgent');
+
+    else raise ENotificationUnknownCardinal.Create(ssNotificationUnknownCardinalValue);
   end;
 end;
 
