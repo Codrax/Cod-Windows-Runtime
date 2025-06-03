@@ -50,6 +50,11 @@ type
   TNotification = class;
   TUserInputMap = class;
 
+  // Re-define
+  ToastNotificationPriority = Winapi.UI.Notifications.ToastNotificationPriority;
+  NotificationMirroring = Winapi.UI.Notifications.NotificationMirroring;
+  NotificationSetting = Winapi.UI.Notifications.NotificationSetting;
+
   // Cardinals
   TSoundEventValue = (
     Default,
@@ -154,6 +159,7 @@ type
   EWinRTNotificationAlreadyPosted = class(EWinRTNotification);
   EWinRTNotificationFeatureNotSupported = class(EWinRTNotification);
   EWinRTNotificationUpdateFailed = class(EWinRTNotification);
+  EWinRTNotificationNotificationNotFound = class(EWinRTNotification);
   ENotificationUnknownCardinal = class(EWinRTNotification);
 
   // Events
@@ -405,9 +411,9 @@ type
     function GenerateXML: TDomXMLDocument; virtual;
 
     (* Using the generates XML, create a notification *)
-    function GenerateNotification: TNotification;
+    function CreateNotification: TNotification;
     (* Free this object and set the notificaiton *)
-    procedure BuildNotificationAndFree(var NotifObject: TNotification);
+    procedure CreateNotificationAndFree(var NotifObject: TNotification);
 
     // Adders
     function AddText(AText: TToastValue): TToastContentBuilder;
@@ -470,6 +476,7 @@ type
     function GetRank: TNotificationRank;
     function GetStatusInteractionCount: integer;
     function GetStatusNotificationCount: integer;
+    function GetSetting: NotificationSetting;
 
     // Setters
     procedure SetHideLockScreen(const Value: TWinBoolean);
@@ -497,6 +504,7 @@ type
     // Status and telemetry
     property TotalNotificationCount: integer read GetStatusNotificationCount;
     property TotalInteractionCount: integer read GetStatusInteractionCount;
+    property Setting: NotificationSetting read GetSetting;
 
     // Utils
     /// <summary>
@@ -797,9 +805,11 @@ begin
       Result := FNotifier2.Update(Data.Data, HS_Tag)
     else
       Result := FNotifier2.Update(Data.Data, HS_Tag, HS_Group);
-      
-    if Result <> NotificationUpdateResult.Succeeded then
-      raise EWinRTNotificationUpdateFailed.CreateFmt('Update procedure for notification failed, with a result of: %D', [integer(Result)]);
+
+    case Result of
+      NotificationUpdateResult.Failed: raise EWinRTNotificationUpdateFailed.Create('Update procedure for notification has failed.');
+      NotificationUpdateResult.NotificationNotFound: raise EWinRTNotificationNotificationNotFound.Create('Update procedure for notification failed, notification not found');
+    end;
   finally
     FreeHString(HS_Tag);
     FreeHString(HS_Group);
@@ -1124,14 +1134,14 @@ begin
     FXMLActions:= FXML.Nodes.AddNode('actions');
 end;
 
-function TToastContentBuilder.GenerateNotification: TNotification;
+function TToastContentBuilder.CreateNotification: TNotification;
 begin
   Result := TNotification.Create( GenerateXML );
 end;
 
-procedure TToastContentBuilder.BuildNotificationAndFree(var NotifObject: TNotification);
+procedure TToastContentBuilder.CreateNotificationAndFree(var NotifObject: TNotification);
 begin
-  NotifObject := GenerateNotification;
+  NotifObject := CreateNotification;
 
   // Free object
   Self.Free;
