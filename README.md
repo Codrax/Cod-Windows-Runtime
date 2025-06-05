@@ -30,7 +30,7 @@ with TAppRegistration.Create do
     AppShowInSettings := false; // show in settings the option to edit notification settings
 
     // Register
-    RegisterApp( falsew ); // true = global, false = local
+    RegisterApp( false ); // true = global, false = local
   finally
     Free;
   end;
