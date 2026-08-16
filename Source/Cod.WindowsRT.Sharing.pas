@@ -277,7 +277,7 @@ end;
 procedure TDataTransferManagerTargetApplicationChosenEvent.Invoke(
   sender: IDataTransferManager; args: ITargetApplicationChosenEventArgs);
 begin
-  const S = args.ApplicationName.ToStringAndDestroy;
+  const S = args.ApplicationName.ToStringAndFree;
 
   for var I := 0 to Count-1 do
     if Assigned(Items[I]) then
@@ -311,7 +311,7 @@ end;
 
 function TDataRequest.GetApplicationName: string;
 begin
-  Result := FInterface.Data.Properties.ApplicationName.ToStringAndDestroy;
+  Result := FInterface.Data.Properties.ApplicationName.ToStringAndFree;
 end;
 
 function TDataRequest.GetDeadline: TDateTime;
@@ -321,7 +321,7 @@ end;
 
 function TDataRequest.GetDescription: string;
 begin
-  Result := FInterface.Data.Properties.Description.ToStringAndDestroy;
+  Result := FInterface.Data.Properties.Description.ToStringAndFree;
 end;
 
 function TDataRequest.GetFileTypes: TArray<string>;
@@ -343,7 +343,7 @@ end;
 
 function TDataRequest.GetTitle: string;
 begin
-  Result := FInterface.Data.Properties.Title.ToStringAndDestroy;
+  Result := FInterface.Data.Properties.Title.ToStringAndFree;
 end;
 
 procedure TDataRequest.MarkDeferralComplete;

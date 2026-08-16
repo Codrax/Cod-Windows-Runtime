@@ -19,7 +19,7 @@ interface
   // System
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes, 
   System.Types, Math, Vcl.Forms, IOUtils, System.Generics.Collections, 
-  Winapi.ActiveX, Win.ComObj, Cod.ArrayHelpers, TypInfo, DateUtils,
+  Winapi.ActiveX, Win.ComObj, TypInfo, DateUtils,
   Winapi.ShlObj, Rtti, Vcl.Graphics,
 
   // Windows RT (Runtime)
@@ -34,7 +34,10 @@ interface
 
   // Winapi
   Winapi.CommonTypes,
-  Winapi.Foundation;
+  Winapi.Foundation,
+
+  // Cod
+  Cod.ArrayHelpers;
 
 type
   {$SCOPEDENUMS OFF}
@@ -384,7 +387,7 @@ type
     function ToString: string;
     procedure Free;
 
-    function ToStringAndDestroy: string;
+    function ToStringAndFree: string;
   end;
 
 // HString
@@ -461,7 +464,7 @@ begin
   Result := HStringToString(Self);
 end;
 
-function HStringHelper.ToStringAndDestroy: string;
+function HStringHelper.ToStringAndFree: string;
 begin
   Result := ToString;
   Free;
@@ -1306,7 +1309,7 @@ class function TStringVectorManager.ToArray(
 begin
   SetLength(Result, AVector.Size);
   for var I := 0 to AVector.Size-1 do
-    Result[I] := AVector.GetAt(I).ToStringAndDestroy;
+    Result[I] := AVector.GetAt(I).ToStringAndFree;
 end;
 
 class procedure TStringVectorManager.AppendArrayTo(Items: TArray<string>;
@@ -1321,7 +1324,7 @@ class function TStringVectorManager.ToArray(
 begin
   SetLength(Result, AVector.Size);
   for var I := 0 to AVector.Size-1 do
-    Result[I] := AVector.GetAt(I).ToStringAndDestroy;
+    Result[I] := AVector.GetAt(I).ToStringAndFree;
 end;
 
 class procedure TStringVectorManager.WriteArrayTo(Items: TArray<string>;

@@ -21,19 +21,20 @@ uses
   Winapi.CommonTypes,
   Winapi.Foundation,
   Winapi.Storage.Streams,
+  Winapi.ShellAPI,
+  Win.Registry,
 
   // Required
   Cod.WindowsRT.AsyncEvents,
   Cod.WindowsRT.Storage,
   Cod.WindowsRT.Runtime.Windows.Media,
 
-  // Cod Utils
-  Cod.Files,
-  Cod.SysUtils,
-  Cod.Windows,
+  // RT
   Cod.WindowsRT,
-  Cod.ArrayHelpers,
-  Cod.Registry;
+
+  // Cod
+  Cod.Files,
+  Cod.ArrayHelpers;
 
 type
   TRegistrationOption = (StartMenu, Registry);
@@ -57,7 +58,7 @@ type
     procedure DeleteIconCache;
 
     // Internal
-    function GetRegistryKey(Global: boolean): string;
+    function GetRegistryKey: string;
     function GetAppIconPath: string;
 
   protected
@@ -143,6 +144,7 @@ function UnRegisterApplication(AppName: string; Global: boolean): boolean;
 
 implementation
 
+/// Util
 function GetAppStartMenuLocation(AppName: string; Global: boolean): string;
 begin
   if Global then
@@ -151,6 +153,71 @@ begin
     Result := IncludeTrailingPathDelimiter(ReplaceWinPath('shell:Start Menu')) + 'Programs\';
   Result := Result+ValidateFileName(AppName)+'.lnk';
 end;
+
+procedure ExtractIconData(AFilePath: string; var Path: string; out IconIndex: integer);
+var
+  Directory: string;
+  FileName: string;
+
+  Index: integer;
+  O: integer;
+begin
+  FileName := ExtractFileName(AFilePath);
+
+  // Extract position
+  Index := FileName.LastIndexOf(',');
+
+  // Index embedeed
+  if (Index = -1) or not TryStrToInt(FileName.Substring(Index+1).Replace(' ', ''), O) then begin
+    Path := AFilePath;
+    IconIndex := 0;
+    Exit;
+  end;
+  IconIndex := O;
+
+  // Remove rest
+  Directory := ExtractFileDir(AFilePath);
+  if Directory <> '' then
+    Directory := IncludeTrailingPathDelimiter(Directory);
+  Path := Directory + FileName.Substring(0, Index); // I is the position, so no need for -1
+end;
+
+procedure ExtractIconDataEx(AFilePath: string; var Path: string; out IconIndex: integer);
+begin
+  // Load
+  if TFile.Exists(AFilePath) then begin
+    Path := AFilePath;
+    IconIndex := 0;
+  end
+    else
+      ExtractIconData(AFilePath, Path, IconIndex);
+end;
+
+function GetIconStrIcon(IconString: string; Icon: TIcon): boolean; overload;
+var
+  IconIndex: integer;
+  lpIcon: word;
+  FilePath: string;
+begin
+  Result := false;
+
+  // Load
+  ExtractIconDataEx(IconString, FilePath, IconIndex);
+  if not TFile.Exists(FilePath) then
+    Exit;
+  if IconIndex < 0 then
+    lpIcon := 0 // resource index -- not supported atm.
+  else
+    lpIcon := IconIndex;
+
+  // Get TIcon
+  Icon.Handle := ExtractAssociatedIcon(HInstance, PChar(FilePath), lpIcon);
+  Icon.Transparent := true;
+
+  // Success
+  Result := true;
+end;
+///
 
 function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description, Arguments, IconPath: string; IconIndex: integer; Global: boolean): boolean;
 begin
@@ -296,16 +363,12 @@ begin
   Result := FAppUserModelID;
 end;
 
-function TAppRegistration.GetRegistryKey(Global: boolean): string;
+function TAppRegistration.GetRegistryKey: string;
 begin
-  const Modal = AppUserModelID;
-  if Modal = '' then
+  if AppUserModelID = '' then
     Exit('');
 
-  if Global then
-    Result := 'HKEY_LOCAL_MACHINE\Software\Classes\AppUserModelId\'+Modal
-  else
-    Result := 'HKEY_CURRENT_USER\Software\Classes\AppUserModelId\'+Modal;
+  Result := 'Software\Classes\AppUserModelId\' + AppUserModelID;
 end;
 
 function TAppRegistration.PartiallyRegistered(Global: boolean): boolean;
@@ -337,50 +400,89 @@ begin
   Result := Registered(false) or Registered(true);
 end;
 
-function TAppRegistration.RegisteredRegistry(Global: boolean): boolean;
-begin
-  Result := TQuickReg.KeyExists( GetRegistryKey(Global) );
-end;
-
 function TAppRegistration.RegisteredStartMenu(Global: boolean): boolean;
 begin
   Result := TFile.Exists(GetAppStartMenuLocation(AppName, Global));
 end;
 
-procedure TAppRegistration.RegisterRegistryClass(DoRegister: boolean; Global: boolean);
+function TAppRegistration.RegisteredRegistry(Global: Boolean): Boolean;
+var
+  Registry: TRegistry;
+  Key: string;
+begin
+  Key := GetRegistryKey;
+  if Key = '' then
+    Exit(False);
+
+  Registry := TRegistry.Create(KEY_READ);
+  try
+    if Global then
+      Registry.RootKey := HKEY_LOCAL_MACHINE
+    else
+      Registry.RootKey := HKEY_CURRENT_USER;
+
+    Result := Registry.KeyExists(Key);
+  finally
+    Registry.Free;
+  end;
+end;
+
+procedure TAppRegistration.RegisterRegistryClass(
+  DoRegister: Boolean;
+  Global: Boolean
+);
 const
   REG_VALUE_NAME = 'DisplayName';
   REG_VALUE_ICON = 'IconUri';
 var
-  Registry: TWinRegistry;
+  Registry: TRegistry;
+  Key: string;
+  AppIcon: string;
 begin
-  const Key = GetRegistryKey(Global);
+  Key := GetRegistryKey;
+  if Key = '' then
+    Exit;
 
-  Registry := TWinRegistry.Create;
+  Registry := TRegistry.Create(KEY_READ or KEY_WRITE);
   try
-    // Register
-    if DoRegister then begin
-      if not Registry.KeyExists(Key) then
-        if not Registry.CreateKey(Key) then
-          raise Exception.Create('Could not create registry class.');
+    if Global then
+      Registry.RootKey := HKEY_LOCAL_MACHINE
+    else
+      Registry.RootKey := HKEY_CURRENT_USER;
 
-      // Write values
-      Registry.WriteValue(Key, REG_VALUE_NAME, GetAppName);
-      const AppIcon = AppIconPath;
-      if WantsAppIconPath and TFile.Exists(AppIcon) then
-        Registry.WriteValue(Key, REG_VALUE_ICON, AppIconPath)
-      else
-        Registry.DeleteValue(Key, REG_VALUE_ICON);
+    if DoRegister then
+    begin
+      if not Registry.CreateKey(Key) then
+        raise Exception.Create('Could not create registry class.');
 
-      if AppShowInSettings.Initiated then
-        Registry.WriteValue(Key, 'ShowInSettings', AppShowInSettings.ToInteger);
+      if not Registry.OpenKey(Key, False) then
+        raise Exception.Create('Could not open registry class.');
+
+      try
+        Registry.WriteString(REG_VALUE_NAME, GetAppName);
+
+        AppIcon := AppIconPath;
+
+        if WantsAppIconPath and TFile.Exists(AppIcon) then
+          Registry.WriteString(REG_VALUE_ICON, AppIcon)
+        else if Registry.ValueExists(REG_VALUE_ICON) then
+          Registry.DeleteValue(REG_VALUE_ICON);
+
+        if AppShowInSettings.Initiated then
+          Registry.WriteInteger(
+            'ShowInSettings',
+            AppShowInSettings.ToInteger
+          );
+      finally
+        Registry.CloseKey;
+      end;
     end
-      else
-    // Unregister
-    if Registry.KeyExists( Key ) then
-      if not Registry.DeleteKey( Key ) then
-        raise Exception.Create('Could not delete registry class.');
-
+    else
+    begin
+      if Registry.KeyExists(Key) then
+        if not Registry.DeleteKey(Key) then
+          raise Exception.Create('Could not delete registry class.');
+    end;
   finally
     Registry.Free;
   end;
@@ -389,7 +491,7 @@ end;
 procedure TAppRegistration.RegisterStartMenuClass(DoRegister: boolean; Global: boolean);
 begin
   if DoRegister then begin
-    var IconIndex: word;
+    var IconIndex: integer;
     var IconPath: string;
     ExtractIconDataEx(AppIconPath, IconPath, IconIndex);
 

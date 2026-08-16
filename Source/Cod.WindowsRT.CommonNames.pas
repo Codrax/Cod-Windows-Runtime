@@ -18,6 +18,7 @@ const
 
   // Factory
   SFactory_SystemMediaTransportControlsInterop = SWindows_Media_SystemMediaTransportControls;
+  SFactory_TaskbarManagerDesktopAppSupportStatics = 'Windows.UI.Shell.TaskbarManager';
 
 implementation
 

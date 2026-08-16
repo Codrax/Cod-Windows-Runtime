@@ -33,10 +33,11 @@ uses
   Imaging.pngimage,
   Imaging.GIFImg,
 
-  // Cod Utils
+  // RT
   Cod.WindowsRT,
-  Cod.ArrayHelpers,
-  Cod.Registry;
+
+  // Cod
+  Cod.ArrayHelpers;
 
 function LoadGraphicFromStream(S: TStream): TGraphic;
 

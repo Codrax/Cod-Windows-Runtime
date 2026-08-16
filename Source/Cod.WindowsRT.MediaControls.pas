@@ -50,9 +50,8 @@ uses
   Cod.WindowsRT.Exceptions,
   Cod.WindowsRT.ResourceStrings,
 
-  // Cod Utils
-  Cod.WindowsRT,
-  Cod.Registry;
+  // RT
+  Cod.WindowsRT;
 
 type
   TGlobalSystemMediaControlsSessionManager = class;
@@ -1006,7 +1005,7 @@ begin
 
   const Active = FInterface.GetCurrentSession;
   for var I: int64 := 0 to int64(FInterface.GetSessions.Size)-1 do
-    if FInterface.GetSessions.GetAt(I).SourceAppUserModelId.ToStringAndDestroy = Active.SourceAppUserModelId.ToStringAndDestroy then
+    if FInterface.GetSessions.GetAt(I).SourceAppUserModelId.ToStringAndFree = Active.SourceAppUserModelId.ToStringAndFree then
       Exit(I);
 end;
 
@@ -1382,17 +1381,17 @@ end;
 
 function TAudioPlaybackMediaPlayerEditor.GetAlbumArtist: string;
 begin
-  Result := FParent.Updater.MusicProperties.AlbumArtist.ToStringAndDestroy;
+  Result := FParent.Updater.MusicProperties.AlbumArtist.ToStringAndFree;
 end;
 
 function TAudioPlaybackMediaPlayerEditor.GetArtist: string;
 begin
-  Result := FParent.Updater.MusicProperties.Artist.ToStringAndDestroy;
+  Result := FParent.Updater.MusicProperties.Artist.ToStringAndFree;
 end;
 
 function TAudioPlaybackMediaPlayerEditor.GetTitle: string;
 begin
-  Result := FParent.Updater.MusicProperties.Title.ToStringAndDestroy;
+  Result := FParent.Updater.MusicProperties.Title.ToStringAndFree;
 end;
 
 procedure TAudioPlaybackMediaPlayerEditor.Initialize;
@@ -1420,12 +1419,12 @@ end;
 
 function TVideoPlaybackMediaPlayerEditor.GetSubtitle: string;
 begin
-  Result := FParent.Updater.VideoProperties.Subtitle.ToStringAndDestroy;
+  Result := FParent.Updater.VideoProperties.Subtitle.ToStringAndFree;
 end;
 
 function TVideoPlaybackMediaPlayerEditor.GetTitle: string;
 begin
-  Result := FParent.Updater.VideoProperties.Title.ToStringAndDestroy;
+  Result := FParent.Updater.VideoProperties.Title.ToStringAndFree;
 end;
 
 procedure TVideoPlaybackMediaPlayerEditor.Initialize;
@@ -1448,12 +1447,12 @@ end;
 
 function TImagePlaybackMediaPlayerEditor.GetSubtitle: string;
 begin
-  Result := FParent.Updater.ImageProperties.Subtitle.ToStringAndDestroy;
+  Result := FParent.Updater.ImageProperties.Subtitle.ToStringAndFree;
 end;
 
 function TImagePlaybackMediaPlayerEditor.GetTitle: string;
 begin
-  Result := FParent.Updater.ImageProperties.Title.ToStringAndDestroy;
+  Result := FParent.Updater.ImageProperties.Title.ToStringAndFree;
 end;
 
 procedure TImagePlaybackMediaPlayerEditor.Initialize;
@@ -1673,7 +1672,7 @@ end;
 
 function TTransportCompatibleClass.GetAppMediaID: string;
 begin
-  Updater.AppMediaId.ToStringAndDestroy;
+  Updater.AppMediaId.ToStringAndFree;
 end;
 
 function TTransportCompatibleClass.GetAutoRepeatMode: TMediaPlaybackAutoRepeatMode;

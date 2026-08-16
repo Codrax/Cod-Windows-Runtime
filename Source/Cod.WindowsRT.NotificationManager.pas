@@ -30,6 +30,7 @@ uses
   // Winapi
   Winapi.CommonTypes,
   Winapi.Foundation,
+  Win.Registry,
 
   // Requirements
   Cod.WindowsRT.AppRegistration,
@@ -39,8 +40,7 @@ uses
   Cod.WindowsRT.ResourceStrings,
 
   // Cod Utils
-  Cod.WindowsRT,
-  Cod.Registry;
+  Cod.WindowsRT;
 
 const
   ssNotificationUnknownCardinalValue = 'Unknown cardinal value.';
@@ -461,6 +461,8 @@ type
     FNotifier: IToastNotifier;
     FNotifier2: IToastNotifier2; // optional, required for updating
 
+    FRegistry: TRegistry;
+
     FRegSettingsPath: string;
 
     // System
@@ -547,6 +549,10 @@ begin
   if not AppRegistration.RegisteredAny then
     OutputDebugString('WARNING: The application model ID is not registered. Notifications will not display.');
 
+  // Create
+  FRegistry := TRegistry.Create(KEY_READ or KEY_WRITE);
+  FRegistry.RootKey := HKEY_CURRENT_USER;
+
   // Set
   FRegSettingsPath :=
     Format('HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\%S', [AppRegistration.AppUserModelID]);
@@ -557,35 +563,46 @@ end;
 
 procedure TNotificationManager.CreateRegistryRecord;
 begin
-  // Create settings
-  if not TQuickReg.KeyExists(FRegSettingsPath) then begin
-    TQuickReg.CreateKey(FRegSettingsPath);
-  end;
+  FRegistry.CreateKey(FRegSettingsPath);
 end;
 
 procedure TNotificationManager.CustomAudioMode(AudioMode: TAudioMode;
   SoundFilePath: string);
+const
+  VAL = 'SoundFile';
 begin
-  const VAL = 'SoundFile';
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
 
-  case AudioMode of
-    TAudioMode.Default:
-      if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-        TQuickReg.DeleteValue(FRegSettingsPath, VAL);
-    TAudioMode.Muted: TQuickReg.WriteValue(FRegSettingsPath, VAL, '');
-    TAudioMode.Custom: TQuickReg.WriteValue(FRegSettingsPath, VAL, SoundFilePath);
+  try
+    case AudioMode of
+      TAudioMode.Default:
+        if FRegistry.ValueExists(VAL) then
+          FRegistry.DeleteValue(VAL);
+
+      TAudioMode.Muted:
+        FRegistry.WriteString(VAL, '');
+
+      TAudioMode.Custom:
+        FRegistry.WriteString(VAL, SoundFilePath);
+    end;
+  finally
+    FRegistry.CloseKey;
   end;
 end;
 
 procedure TNotificationManager.DeleteRegistryRecord;
 begin
-  // Delete user configurations
-  TQuickReg.DeleteKey(FRegSettingsPath);
+  FRegistry.DeleteKey(FRegSettingsPath);
 end;
 
 destructor TNotificationManager.Destroy;
 begin
   FNotifier := nil;
+  FNotifier2 := nil;
+
+  FRegistry.Free;
+
   inherited;
 end;
 
@@ -602,66 +619,125 @@ begin
 end;
 
 function TNotificationManager.GetHideLockScreen: TWinBoolean;
+const
+  VAL = 'AllowContentAboveLock';
 begin
   Result := WinDefault;
-  const VAL = 'AllowContentAboveLock';
 
-  if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-    Result := TWinBool.Create( TQuickReg.GetBoolValue(FRegSettingsPath, VAL) );
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
+
+  try
+    if FRegistry.ValueExists(VAL) then
+      Result := TWinBool.Create(FRegistry.ReadBool(VAL));
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 function TNotificationManager.GetRank: TNotificationRank;
+const
+  VAL = 'ShowInActionCenter';
+var
+  Rank: Integer;
 begin
   Result := TNotificationRank.Default;
-  const VAL = 'ShowInActionCenter';
 
-  if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-    case TQuickReg.GetIntValue(FRegSettingsPath, VAL) of
-      0: Result := TNotificationRank.Normal;
-      1..98: Result := TNotificationRank.High;
-      99..1000: Result := TNotificationRank.Topmost;
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
+
+  try
+    if FRegistry.ValueExists(VAL) then
+    begin
+      Rank := FRegistry.ReadInteger(VAL);
+
+      case Rank of
+        0: Result := TNotificationRank.Normal;
+        1..98: Result := TNotificationRank.High;
+        99..1000: Result := TNotificationRank.Topmost;
+      end;
     end;
+  finally
+    FRegistry.CloseKey;
+  end;
+end;
+
+function TNotificationManager.GetSetting: NotificationSetting;
+begin
+  Result := FNotifier.Setting;
 end;
 
 function TNotificationManager.GetShowBanner: TWinBoolean;
+const
+  VAL = 'ShowBanner';
 begin
   Result := WinDefault;
-  const VAL = 'ShowBanner';
 
-  if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-    Result := TWinBool.Create( TQuickReg.GetBoolValue(FRegSettingsPath, VAL) );
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
+
+  try
+    if FRegistry.ValueExists(VAL) then
+      Result := TWinBool.Create(FRegistry.ReadBool(VAL));
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 function TNotificationManager.GetShowInActionCenter: TWinBoolean;
+const
+  VAL = 'ShowInActionCenter';
 begin
   Result := WinDefault;
-  const VAL = 'ShowInActionCenter';
 
-  if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-    Result := TWinBool.Create( TQuickReg.GetBoolValue(FRegSettingsPath, VAL) );
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
+
+  try
+    if FRegistry.ValueExists(VAL) then
+      Result := TWinBool.Create(FRegistry.ReadBool(VAL));
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 function TNotificationManager.GetStatusInteractionCount: integer;
+const
+  VAL = 'PeriodicInteractionCount';
 begin
   Result := 0;
-  const VAL = 'PeriodicInteractionCount';
 
-  if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-    Result := TQuickReg.GetIntValue(FRegSettingsPath, VAL);
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
+
+  try
+    if FRegistry.ValueExists(VAL) then
+      Result := FRegistry.ReadInteger(VAL);
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 function TNotificationManager.GetStatusNotificationCount: integer;
+const
+  VAL = 'PeriodicNotificationCount';
 begin
   Result := 0;
-  const VAL = 'PeriodicNotificationCount';
 
-  if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-    Result := TQuickReg.GetIntValue(FRegSettingsPath, VAL);
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
+
+  try
+    if FRegistry.ValueExists(VAL) then
+      Result := FRegistry.ReadInteger(VAL);
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 function TNotificationManager.HasRegistryRecord: boolean;
 begin
-  Result := TQuickReg.KeyExists(FRegSettingsPath);
+  Result := FRegistry.KeyExists(FRegSettingsPath);
 end;
 
 procedure TNotificationManager.HideNotification(Notification: TNotification);
@@ -716,49 +792,80 @@ begin
 end;
 
 procedure TNotificationManager.SetShowBanner(const Value: TWinBoolean);
+const
+  VAL = 'ShowBanner';
 begin
-  const VAL = 'ShowBanner';
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
 
-  if Value <> WinDefault then
-    TQuickReg.WriteValue(FRegSettingsPath, VAL, Value.ToBoolean())
-  else
-    if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-      TQuickReg.DeleteValue(FRegSettingsPath, VAL);
+  try
+    if Value <> WinDefault then
+      FRegistry.WriteBool(VAL, Value.ToBoolean)
+    else if FRegistry.ValueExists(VAL) then
+      FRegistry.DeleteValue(VAL);
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 procedure TNotificationManager.SetShowInActionCenter(const Value: TWinBoolean);
+const
+  VAL = 'ShowInActionCenter';
 begin
-  const VAL = 'ShowInActionCenter';
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
 
-  if Value <> WinDefault then
-    TQuickReg.WriteValue(FRegSettingsPath, VAL, Value.ToBoolean())
-  else
-    if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-      TQuickReg.DeleteValue(FRegSettingsPath, VAL);
+  try
+    if Value <> WinDefault then
+      FRegistry.WriteBool(VAL, Value.ToBoolean)
+    else if FRegistry.ValueExists(VAL) then
+      FRegistry.DeleteValue(VAL);
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 procedure TNotificationManager.SetHideLockScreen(const Value: TWinBoolean);
+const
+  VAL = 'AllowContentAboveLock';
 begin
-  const VAL = 'AllowContentAboveLock';
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
 
-  if Value <> WinDefault then
-    TQuickReg.WriteValue(FRegSettingsPath, VAL, Value.ToBoolean())
-  else
-    if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-      TQuickReg.DeleteValue(FRegSettingsPath, VAL);
+  try
+    if Value <> WinDefault then
+      FRegistry.WriteBool(VAL, Value.ToBoolean)
+    else if FRegistry.ValueExists(VAL) then
+      FRegistry.DeleteValue(VAL);
+  finally
+    FRegistry.CloseKey;
+  end;
 end;
 
 procedure TNotificationManager.SetRank(const Value: TNotificationRank);
+const
+  VAL = 'ShowInActionCenter';
 begin
-  const VAL = 'ShowInActionCenter';
+  if not FRegistry.OpenKey(FRegSettingsPath, False) then
+    Exit;
 
-  case Value of
-    TNotificationRank.Default:
-      if TQuickReg.ValueExists(FRegSettingsPath, VAL) then
-        TQuickReg.DeleteValue(FRegSettingsPath, VAL);
-    TNotificationRank.Normal: TQuickReg.WriteValue(FRegSettingsPath, VAL, 0);
-    TNotificationRank.High: TQuickReg.WriteValue(FRegSettingsPath, VAL, 1);
-    TNotificationRank.Topmost: TQuickReg.WriteValue(FRegSettingsPath, VAL, 99);
+  try
+    case Value of
+      TNotificationRank.Default:
+        if FRegistry.ValueExists(VAL) then
+          FRegistry.DeleteValue(VAL);
+
+      TNotificationRank.Normal:
+        FRegistry.WriteInteger(VAL, 0);
+
+      TNotificationRank.High:
+        FRegistry.WriteInteger(VAL, 1);
+
+      TNotificationRank.Topmost:
+        FRegistry.WriteInteger(VAL, 99);
+    end;
+  finally
+    FRegistry.CloseKey;
   end;
 end;
 

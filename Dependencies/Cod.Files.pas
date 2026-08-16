@@ -19,10 +19,10 @@ unit Cod.Files;
 interface
 uses
   {$IFDEF MSWINDOWS}
-  Winapi.Windows, Winapi.ShellAPI, Cod.Registry, Win.Registry, Win.ComObj,
+  Winapi.Windows, Winapi.ShellAPI, Win.Registry, Win.ComObj,
   {$ENDIF}
   System.SysUtils, System.Variants, System.Classes, IOUtils, Math,
-  Cod.MesssageConst, Cod.ArrayHelpers;
+  Cod.ArrayHelpers;
 
 {$IFDEF MSWINDOWS}
 const
@@ -74,9 +74,19 @@ type
 
   TAppDataType = (Local, Roaming, LocalLow);
 
-  TUserShellLocation = (User, AppData, AppDataLocal, Documents, Pictures,
-    Desktop, Music, Videos, Network, Recent, StartMenu, Startup, Downloads,
-    Programs);
+  // HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders
+  // HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders
+  TUserShellLocation = (User, Libraries, SavedGames, Contacts, Searches, Links,
+    User3DObject,
+    //
+    AdministrativeTools, AppData, LocalLowAppData, LocalAppData, Cache,
+    CDBurning, Cookies, Desktop, Favorites, Fonts, History, Pictures,
+    Music, Videos, Network, Documents, PrintHood, Programs, Recent, SendTo,
+    StartMenu, Startup, Templates, Downloads);
+  // HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders
+  // HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders
+  TCommonShellLocation = (Downloads, AdministrativeTools, AppData, Desktop, Documents,
+    Programs, StartMenu, Startup, Templates, Music, Pictures, Videos, OEMLinks);
 
   TFileIOFlag = (ConfirmMouse, Silent, NoConfirmation, AllowUndo, FilesOnly,
     SimpleProgress, NoConfirMakeDir, NoErrorUI, NoSecurityAttrib, NoRecursion,
@@ -93,6 +103,10 @@ function GetPathDepth(Path: string): integer;
 function GetDisallowedFilenameCharacters: TCharArray;
 function ValidateFileName(const AString: string): string;
 function IsFileNameValid(const AString: string): boolean;
+
+// Directory
+///  <summary> Extracts the parent directory of a directory. </summary>
+function ExtractDirDir(Path: string): string;
 
 // Size
 function SizeInString(Size: int64; Scale: TSourceSize=TSourceSize.Bytes; MaxDecimals: cardinal=2): string;
@@ -114,12 +128,11 @@ procedure SetFileDate(const FileName: string; AType: TFileDateTimeType; NewDate:
 // Common locations
 {$IFDEF POSIX}
 function GetPathInAppData(AppName: string; Company: string; Create: boolean): string; overload;
-function GetPathInAppData(AppName: string; Create: boolean=true): string; overload;
+function GetPathInAppData(AppName: string; Create: boolean): string; overload;
 {$ENDIF}
 {$IFDEF MSWINDOWS}
 function GetPathInAppData(AppName: string; Company: string;
-  FolderType: TAppDataType; Create: boolean): string; overload;
-function GetPathInAppData(AppName: string; FolderType: TAppDataType; Create: boolean=true): string; overload;
+  FolderType: TAppDataType; Create: boolean): string;
 {$ENDIF}
 
 (* NTFS *)
@@ -129,6 +142,7 @@ function ReplaceWinPath(SrcString: string): string;
 function ReplaceEnviromentVariabiles(SrcString: string): string;
 function ReplaceShellLocations(SrcString: string): string;
 function GetUserShellLocation(ShellLocation: TUserShellLocation): string;
+function GetCommonShellLocation(ShellLocation: TCommonShellLocation): string;
 
 function GetSystemDrive: string;
 
@@ -146,6 +160,7 @@ procedure CopyDiskItem(Source: string; Destination: string; Flags: TFileIOFlags 
 {$IFDEF MSWINDOWS}
 procedure GetDiskSpace(const Disk: string; var FreeBytes, TotalBytes, TotalFreeBytes: int64);
 function GetBusType(Drive: AnsiChar): TStorageBusType;
+function GetDrives: TArray<AnsiChar>;
 function GetUsbDrives: TArray<AnsiChar>;
 {$ENDIF}
 
@@ -164,11 +179,6 @@ function CompressFolder(const FolderName:string;Recursive, Compress:Boolean): in
 
 implementation
 
-{$IFDEF MSWINDOWS}
-uses
-  Cod.Windows;
-{$ENDIF}
-
 function GetSystemRoot: string;
 begin
   {$IFDEF MSWINDOWS}
@@ -186,7 +196,18 @@ end;
 
 function GetDisallowedFilenameCharacters: TCharArray;
 begin
-  Result := ['/', #0{$IFDEF MSWINDOWS}, '|', '<', '>', '\', '?', '"', ':', '*'{$ENDIF}];
+  Result := [
+    // Common
+    #0
+    // Windows
+    {$IFDEF MSWINDOWS}, '|', '<', '>', '\', '?', '"', ':', '*'{$ENDIF}
+
+    // Unix/Linux disallowed characters
+    {$IFDEF POSIX},'/'{$ENDIF}
+
+    // macOS-specific disallowed character (colon is used as a path separator on older systems)
+    {$IFDEF DARWIN}, ':'{$ENDIF}
+  ];
 end;
 
 function ValidateFileName(const AString: string): string;
@@ -210,6 +231,11 @@ begin
       Exit(false);
 
   Result := true;
+end;
+
+function ExtractDirDir(Path: string): string;
+begin
+  Result := ExtractFileDir(ExcludeTrailingPathDelimiter(Path))
 end;
 
 function SizeInString(Size: int64; Scale: TSourceSize; MaxDecimals: cardinal): string;
@@ -266,7 +292,7 @@ begin
   if DirectoryExists(FolderPath) then begin
     Result := SizeInString(GetFolderSize(FolderPath));
   end else
-    Result := NOT_NUMBER;
+    Result := 'NaN';
 end;
 
 function GetFileSize(FilePath: string): Int64;
@@ -279,7 +305,7 @@ begin
   if FileExists(FilePath) then begin
     Result := SizeInString(GetFileSize(FilePath));
   end else
-    Result := NOT_NUMBER;
+    Result := 'NaN';
 end;
 
 {$IFDEF MSWINDOWS}
@@ -353,10 +379,33 @@ end;
 {$ENDIF}
 
 {$IFDEF MSWINDOWS}
+function GetNTKernelVersion: single;
+begin
+  Result := Win32MajorVersion + Win32MinorVersion / 10;
+end;
+
+function GetUserNameString: string;
+var
+  dwSize: DWORD;
+begin
+  // Get size
+  dwSize := 0;
+  GetUserName(nil, dwSize);
+
+  // None
+  if dwSize = 0 then
+    Exit('');
+
+  // Provide address
+  SetLength(Result, dwSize-1); // exclude null-terminated
+  if not GetUserName(PWideChar(Result), dwSize) then
+    RaiseLastOSError;
+end;
+
 function GetPathInAppData(AppName: string; Company: string;
   FolderType: TAppDataType; Create: boolean): string;
 begin
-  if NTKernelVersion < 6 then
+  if GetNTKernelVersion < 6 then
     // Windows Xp and below
     Result := GetSystemDrive + '\Documents and Settings\' + GetUserNameString + '\Application Data\'
       else
@@ -381,11 +430,6 @@ begin
   Result := Result + AppName + '\';
   if Create and (not TDirectory.Exists(Result)) then
     TDirectory.CreateDirectory(result);
-end;
-
-function GetPathInAppData(AppName: string; FolderType: TAppDataType; Create: boolean=true): string; overload;
-begin
-  Result := GetPathInAppData(AppName, DEFAULT_COMPANY, FolderType, Create);
 end;
 {$ENDIF}
 
@@ -510,12 +554,34 @@ end;
 function GetUserShellLocation(ShellLocation: TUserShellLocation): string;
 var
   RegString, RegValue: string;
-  Registry: TWinRegistry;
+  Registry: TRegistry;
 begin
+  Result := '';
+
   case ShellLocation of
-    TUserShellLocation.User: Exit( ReplaceWinPath('%USERPROFILE%') );
+    TUserShellLocation.User:
+      Exit(ReplaceWinPath('%USERPROFILE%'));
+
+    TUserShellLocation.Libraries: RegValue := '{1B3EA5DC-B587-4786-B4EF-BD1DC332AEAE}';
+    TUserShellLocation.SavedGames: RegValue := '{4C5C32FF-BB9D-43B0-B5B4-2D72E54EAAA4}';
+    TUserShellLocation.Contacts: RegValue := '{56784854-C6CB-462B-8169-88E350ACB882}';
+    TUserShellLocation.Searches: RegValue := '{7D1D3A04-DEBB-4115-95CF-2F29DA2920DA}';
+    TUserShellLocation.Links: RegValue := '{BFB9D5E0-C6A9-404C-B2B2-AE6DB6AF4968}';
+    TUserShellLocation.User3DObject: RegValue := '{31C0DD25-9439-4F12-BF41-7FF4EDA38722}';
+
+    TUserShellLocation.AdministrativeTools: RegValue := 'Administrative Tools';
+    TUserShellLocation.Cache: RegValue := 'Cache';
+    TUserShellLocation.CDBurning: RegValue := 'CD Burning';
+    TUserShellLocation.Cookies: RegValue := 'Cookies';
+    TUserShellLocation.Fonts: RegValue := 'Fonts';
+    TUserShellLocation.Favorites: RegValue := 'Favorites';
+    TUserShellLocation.History: RegValue := 'History';
+    TUserShellLocation.PrintHood: RegValue := 'PrintHood';
+    TUserShellLocation.SendTo: RegValue := 'SendTo';
+    TUserShellLocation.Templates: RegValue := 'Templates';
     TUserShellLocation.AppData: RegValue := 'AppData';
-    TUserShellLocation.AppDataLocal: RegValue := 'Local AppData';
+    TUserShellLocation.LocalAppData: RegValue := 'Local AppData';
+    TUserShellLocation.LocalLowAppData: RegValue := '{A520A1A4-1780-4FF6-BD18-167343C5AF16}';
     TUserShellLocation.Documents: RegValue := 'Personal';
     TUserShellLocation.Pictures: RegValue := 'My Pictures';
     TUserShellLocation.Desktop: RegValue := 'Desktop';
@@ -524,14 +590,107 @@ begin
     TUserShellLocation.Network: RegValue := 'NetHood';
     TUserShellLocation.Recent: RegValue := 'Recent';
     TUserShellLocation.StartMenu: RegValue := 'Start Menu';
-    TUserShellLocation.Programs: RegValue := 'Programs';
     TUserShellLocation.Startup: RegValue := 'Startup';
     TUserShellLocation.Downloads: RegValue := '{374DE290-123F-4565-9164-39C4925E467B}';
+    TUserShellLocation.Programs: RegValue := 'Programs';
+
+    else
+      Exit;
   end;
 
-  Registry := TWinRegistry.Create;
+  Registry := TRegistry.Create(KEY_READ);
   try
-    RegString := Registry.GetStringValue('HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders', RegValue);
+    Registry.RootKey := HKEY_CURRENT_USER;
+
+    if Registry.OpenKey(
+      'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders',
+      False
+    ) then
+    try
+      if Registry.ValueExists(RegValue) then
+        RegString := Registry.ReadString(RegValue)
+      else
+        RegString := '';
+    finally
+      Registry.CloseKey;
+    end;
+
+    if RegString = '' then
+    begin
+      if Registry.OpenKey(
+        'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders',
+        False
+      ) then
+      try
+        if Registry.ValueExists(RegValue) then
+          RegString := Registry.ReadString(RegValue);
+      finally
+        Registry.CloseKey;
+      end;
+    end;
+  finally
+    Registry.Free;
+  end;
+
+  Result := ReplaceWinPath(RegString);
+end;
+
+function GetCommonShellLocation(ShellLocation: TCommonShellLocation): string;
+var
+  RegString, RegValue: string;
+  Registry: TRegistry;
+begin
+  Result := '';
+
+  case ShellLocation of
+    TCommonShellLocation.Downloads: RegValue := '{3D644C9B-1FB8-4f30-9B45-F670235F79C0}';
+    TCommonShellLocation.AdministrativeTools: RegValue := 'Common Administrative Tools';
+    TCommonShellLocation.AppData: RegValue := 'Common AppData';
+    TCommonShellLocation.Desktop: RegValue := 'Common Desktop';
+    TCommonShellLocation.Documents: RegValue := 'Common Documents';
+    TCommonShellLocation.Programs: RegValue := 'Common Programs';
+    TCommonShellLocation.StartMenu: RegValue := 'Common Start Menu';
+    TCommonShellLocation.Startup: RegValue := 'Common Startup';
+    TCommonShellLocation.Templates: RegValue := 'Common Templates';
+    TCommonShellLocation.Music: RegValue := 'CommonMusic';
+    TCommonShellLocation.Pictures: RegValue := 'CommonPictures';
+    TCommonShellLocation.Videos: RegValue := 'CommonVideo';
+    TCommonShellLocation.OEMLinks: RegValue := 'OEM Links';
+
+    else
+      Exit;
+  end;
+
+  Registry := TRegistry.Create(KEY_READ);
+  try
+    Registry.RootKey := HKEY_LOCAL_MACHINE;
+
+    if Registry.OpenKey(
+      'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders',
+      False
+    ) then
+    try
+      if Registry.ValueExists(RegValue) then
+        RegString := Registry.ReadString(RegValue)
+      else
+        RegString := '';
+    finally
+      Registry.CloseKey;
+    end;
+
+    if RegString = '' then
+    begin
+      if Registry.OpenKey(
+        'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders',
+        False
+      ) then
+      try
+        if Registry.ValueExists(RegValue) then
+          RegString := Registry.ReadString(RegValue);
+      finally
+        Registry.CloseKey;
+      end;
+    end;
   finally
     Registry.Free;
   end;
@@ -698,6 +857,17 @@ begin
   end;
 end;
 
+function GetDrives: TArray<AnsiChar>;
+var
+  DriveBits: set of 0..25;
+  I: Integer;
+begin
+  Cardinal(DriveBits) := GetLogicalDrives;
+
+  for I := 0 to 25 do
+    if I in DriveBits then
+      TArrayUtils<AnsiChar>.AddValue(AnsiChar(Chr(Ord('a') + I)), Result);
+end;
 
 function GetUsbDrives: TArray<AnsiChar>;
 var
@@ -763,16 +933,18 @@ begin
         TFileAttribute.Encrypted: WinAtr := faEncrypted;
       end;
 
-      // Automatic Handeling
-      if HandleCompression and (DoWith = TFileAttribute.Compressed) then
-        begin
+      //
+      if DoWith = TFileAttribute.Compressed then begin
+        // Automatic Handeling
+        if (HandleCompression) then begin
           if TFile.Exists(Path) then
             CompressFile(Path, DoWith in Attribs)
           else
             CompressFolder(Path, true, DoWith in Attribs);
-
-          Break;
         end;
+
+        Break;
+      end;
 
       // Change Attrib
       Attrs := FileGetAttr(Path);
