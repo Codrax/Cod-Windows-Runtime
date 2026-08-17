@@ -49,8 +49,7 @@ uses
   Cod.WindowsRT.ResourceStrings,
 
   // Cod Utils
-  Cod.WindowsRT,
-  Cod.Registry;
+  Cod.WindowsRT;
 
 const
   CLSID_ApplicationActivationManager: TGUID = '{45BA127D-10A8-46EA-8AB7-56EA9078943C}';

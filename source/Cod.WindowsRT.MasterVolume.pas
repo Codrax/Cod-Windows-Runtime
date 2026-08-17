@@ -487,7 +487,7 @@ begin
           if Succeeded(MMDevice.GetId(DeviceID)) then
           begin
             // DeviceID contains the unique identifier of the device
-            Result.AddValue( DeviceID );
+            Result := Result + [DeviceID];
           end;
         end;
       end;
@@ -506,7 +506,7 @@ begin
     if waveOutGetDevCaps(i, @waveOutCaps, SizeOf(TWAVEOUTCAPS)) = MMSYSERR_NOERROR then
     begin
       // Add string
-      result.AddValue( Trim(waveOutCaps.szPname) );
+      Result := Result + [Trim(waveOutCaps.szPname)];
     end;
   end;
 end;
