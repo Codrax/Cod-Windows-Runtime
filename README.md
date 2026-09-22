@@ -26,8 +26,11 @@ with TAppRegistration.Create do
     AppName := 'Example app name';
     AppIconPath := ''; // location to ico file, can be left blank to create automatically
     AppDescription := 'Very interesting app description.';
+    AppStartingDirectory := 'C:\AppName\';
     AppLaunchArguments := ''; // launch arguments for start menu shortcut
     AppShowInSettings := false; // show in settings the option to edit notification settings
+
+    RegistrationOptions := [TRegistrationOption.StartMenu, TRegistrationOption.Registry];
 
     // Register
     RegisterApp( false ); // true = global, false = local
