@@ -46,6 +46,7 @@ type
     FAppName: string;
     FWantsAppIconPath: boolean;
     FAppIconPath: string;
+    FAppStartingDirectory: string;
     FAppDescription: string;
     FAppLaunchArguments: string;
     FAppExecutable: string;
@@ -88,7 +89,7 @@ type
   public
     // For system use
     property AppUserModelID: string read GetAppUserModelID write SetAppUserModelID;
-    property AppExecutable: string read GetAppExecutable write SetAppExecutable;
+    property AppExecutable: string read GetAppExecutable write SetAppExecutable; // or URI
 
     property RegistrationOptions: TRegistrationOptions read FRegOptions write FRegOptions;
 
@@ -97,6 +98,7 @@ type
     property WantsAppIconPath: boolean read FWantsAppIconPath write FWantsAppIconPath;
     property AppIconPath: string read GetAppIconPath write FAppIconPath; // also supports proper icon formating, such as "C:\icon.ico, 2". Where 2 is the index
     property AppDescription: string read FAppDescription write FAppDescription;
+    property AppStartingDirectory: string read FAppStartingDirectory write FAppStartingDirectory;
     property AppLaunchArguments: string read FAppLaunchArguments write FAppLaunchArguments;
 
     // For registry
@@ -137,9 +139,9 @@ var
   AppRegistration: TCurrentAppRegistration;
 
 // Shortcut
-function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, Description: string; Arguments: string=''; IconPath: string=''; IconIndex: integer=0): boolean;
+function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, WorkingDir, Description: string; Arguments: string=''; IconPath: string=''; IconIndex: integer=0): boolean;
 
-function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description: string; Arguments: string=''; IconPath: string=''; IconIndex: integer=0; Global: boolean=true): boolean;
+function RegisterApplication(AppName, AppUserModelID, AppExecutable, AppStartingDirectory, Description: string; Arguments: string=''; IconPath: string=''; IconIndex: integer=0; Global: boolean=true): boolean;
 function UnRegisterApplication(AppName: string; Global: boolean): boolean;
 
 implementation
@@ -219,9 +221,9 @@ begin
 end;
 ///
 
-function RegisterApplication(AppName, AppUserModelID, AppExecutable, Description, Arguments, IconPath: string; IconIndex: integer; Global: boolean): boolean;
+function RegisterApplication(AppName, AppUserModelID, AppExecutable, AppStartingDirectory, Description, Arguments, IconPath: string; IconIndex: integer; Global: boolean): boolean;
 begin
-  Result := InstallShortcut(AppUserModelID, AppExecutable, GetAppStartMenuLocation(AppName, Global), Description, Arguments, IconPath, IconIndex);
+  Result := InstallShortcut(AppUserModelID, AppExecutable, AppStartingDirectory, GetAppStartMenuLocation(AppName, Global), Description, Arguments, IconPath, IconIndex);
 end;
 
 function UnRegisterApplication(AppName: string; Global: boolean): boolean;
@@ -238,7 +240,7 @@ begin
   end;
 end;
 
-function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, Description, Arguments, IconPath: string; IconIndex: integer): boolean;
+function InstallShortcut(AppUserModelID, ExePath, ShortcutPath, WorkingDir, Description, Arguments, IconPath: string; IconIndex: integer): boolean;
 var
   newShortcut: IShellLink;
 
@@ -252,13 +254,12 @@ begin
   // Add data
   with newShortcut do
   begin
+    SetPath(PChar(ExePath));
     SetArguments(PChar(Arguments));
     SetDescription(PChar(Description));
-    SetPath(PChar(ExePath));
     SetWorkingDirectory(PChar( ExtractFileDir(ExePath) ));
-
-    if IconPath <> '' then
-      SetIconLocation(PChar(IconPath), 0);
+    if WorkingDir <> '' then
+      SetIconLocation(PChar(WorkingDir), IconIndex);
   end;
 
   // Property store
@@ -495,7 +496,7 @@ begin
     var IconPath: string;
     ExtractIconDataEx(AppIconPath, IconPath, IconIndex);
 
-    if not RegisterApplication(GetAppName, AppUserModelID, AppExecutable, AppDescription, AppLaunchArguments, IconPath, IconIndex, Global) then
+    if not RegisterApplication(GetAppName, AppUserModelID, AppExecutable, AppDescription, AppStartingDirectory, AppLaunchArguments, IconPath, IconIndex, Global) then
       raise Exception.Create('Failed to register application in start menu.');
   end
     else
